@@ -1,0 +1,34 @@
+# Environment and secrets
+.env
+.env.local
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Generated / local data (folders kept via .gitkeep)
+data/customers.db
+data/chroma/
+data/policies/*.pdf
+*.sqlite3
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Cursor AI rules (local)
+.cursor/rules/codacy.mdc
