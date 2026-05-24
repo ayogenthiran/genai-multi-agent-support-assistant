@@ -2,17 +2,17 @@
 
 ## Overview
 
-This project is a GenAI multi-agent assistant for a customer support executive. It answers natural language questions using structured customer data from SQLite and policy PDFs through RAG.
+This project is a GenAI multi-agent assistant for customer support workflows. It answers natural language questions using structured customer data from SQLite and policy PDFs through retrieval-augmented generation (RAG).
 
 The assistant can look up customer profiles and ticket history, search indexed policy documents, and combine both sources into a clear support response.
 
-## Assignment Objective
+## Objective
 
-The system supports:
+The system is designed to:
 
-- Querying structured customer-related data using natural language
-- Processing policy PDFs into a searchable knowledge base
-- Generating accurate, context-aware support responses
+- Query structured customer-related data using natural language
+- Process policy PDFs into a searchable knowledge base
+- Generate accurate, context-aware support responses
 
 ## Key Features
 
@@ -36,7 +36,7 @@ Prerequisites:
 - Python 3.10+
 - OpenAI API key
 
-Fresh-clone setup:
+Set up the environment:
 
 ```bash
 python -m venv .venv
@@ -57,7 +57,7 @@ Add your OpenAI API key to `.env`:
 OPENAI_API_KEY=your-openai-api-key
 ```
 
-Create the local demo data and sample policy PDFs:
+Create the SQLite demo data and sample policy PDFs:
 
 ```bash
 python -m src.create_dummy_data
@@ -70,7 +70,7 @@ Run the Streamlit app:
 streamlit run app.py
 ```
 
-Important fresh-clone note: `data/customers.db` is generated locally and is not committed to the repository. Run `python -m src.create_dummy_data` before asking customer-related questions.
+`data/customers.db` is generated locally and is not committed to the repository. Run `python -m src.create_dummy_data` before asking customer-related questions.
 
 Optional variables such as `OPENAI_MODEL`, `SQLITE_DB_PATH`, `CHROMA_PERSIST_DIR`, and `POLICIES_DIR` can be left at their defaults for the demo.
 
@@ -97,6 +97,8 @@ Uploading and processing a PDF from the Streamlit sidebar resets the existing Ch
 
 The project includes an MCP-style tool layer in `src/mcp_server/server.py`. For the Streamlit demo, agents call the local tool registry directly through `call_tool()`, so a separate MCP process is not required.
 
+The tool layer keeps SQL customer lookups and document retrieval behind predefined interfaces. SQL tools query the local SQLite customer database, while document tools ingest PDFs, store embeddings in ChromaDB, and retrieve policy context for RAG answers.
+
 The optional FastMCP server can be started with:
 
 ```bash
@@ -116,7 +118,7 @@ This exposes the same predefined SQL and document tools through an MCP-compatibl
 
 ## Demo Video
 
-Demo video: [Add URL here]
+Demo video: https://youtu.be/Z3qu_uJPXF0
 
 ## Main Components
 
