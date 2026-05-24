@@ -10,7 +10,7 @@ import pytest
 from langchain_core.documents import Document
 
 from src.create_policy_pdfs import create_policy_pdfs
-from src.rag.document_loader import infer_policy_type, load_pdf_pages
+from src.rag.document_loader import infer_policy_type, load_documents, load_pdf_pages
 from src.rag.retriever import (
     _build_policy_type_filter,
     _infer_query_policy_types,
@@ -39,6 +39,20 @@ def test_create_policy_pdfs_writes_expected_files(tmp_path: Path) -> None:
         pages = load_pdf_pages(str(path))
         assert pages
         assert pages[0].metadata["policy_type"] == infer_policy_type(filename)
+
+
+def test_load_documents_searches_policy_subdirectories(tmp_path: Path) -> None:
+    nested_policy_dir = tmp_path / "sample"
+    create_policy_pdfs(nested_policy_dir)
+
+    documents = load_documents(tmp_path)
+
+    sources = {doc.metadata["source"] for doc in documents}
+    assert {
+        "refund_policy.pdf",
+        "warranty_policy.pdf",
+        "shipping_policy.pdf",
+    }.issubset(sources)
 
 
 def test_rewrite_policy_query_returns_non_empty_string() -> None:

@@ -6,6 +6,7 @@
 .venv/
 venv/
 __pycache__/
+*.pyc
 *.py[cod]
 *.egg-info/
 dist/
@@ -17,6 +18,7 @@ build/
 htmlcov/
 
 # Generated / local data (folders kept via .gitkeep)
+data/customers.db
 data/*.db
 data/*.sqlite
 data/*.sqlite3

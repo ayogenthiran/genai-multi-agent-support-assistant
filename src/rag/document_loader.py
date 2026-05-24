@@ -70,12 +70,12 @@ def load_pdf_pages(file_path: str) -> list[Document]:
 
 
 def load_documents(policies_dir: Path | None = None) -> list[Document]:
-    """Load page-level documents from all PDFs in the policies directory."""
+    """Load page-level documents from all PDFs in the policies directory tree."""
     settings = get_settings()
     target_dir = policies_dir or settings.policies_dir
     target_dir.mkdir(parents=True, exist_ok=True)
 
     documents: list[Document] = []
-    for pdf_path in sorted(target_dir.glob("*.pdf")):
+    for pdf_path in sorted(target_dir.rglob("*.pdf")):
         documents.extend(load_pdf_pages(str(pdf_path)))
     return documents
