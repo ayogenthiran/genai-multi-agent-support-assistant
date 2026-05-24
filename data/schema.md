@@ -1,8 +1,9 @@
 # Customer Support Database – Schema Reference
 
-This file describes every table and column in `data/customers.db` in plain English.
-It is intended to provide additional schema context to the LangChain SQL agent so it
-can plan accurate JOIN queries.
+This file provides a human-readable reference for the synthetic SQLite database used by
+the SQL Customer Agent. It is intended for developers and reviewers. The application
+uses predefined, parameterized SQL tools rather than generating raw SQL from natural
+language.
 
 ---
 
@@ -51,7 +52,7 @@ Stores one row per customer support ticket.
 | `ticket_id` | INTEGER PK | Unique identifier for the support ticket. |
 | `customer_id` | INTEGER FK | References `customers.customer_id` — the customer who raised the ticket. |
 | `created_at` | TEXT | ISO 8601 date on which the ticket was created. |
-| `issue_type` | TEXT | Category of the issue: one of `Refund Request`, `Damaged Product`, `Login Issue`, `Billing Issue`, `Subscription Change`, `Shipping Delay`, `Technical Support`, or `Account Update`. |
+| `issue_type` | TEXT | Category of the issue: one of `Refund Request`, `Damaged Product`, `Login Issue`, `Billing Issue`, `Subscription Change`, `Shipping Delay`, `Technical Support`, `Account Update`, or `Warranty Claim`. |
 | `priority` | TEXT | Urgency level: one of `Low`, `Medium`, `High`, or `Critical`. |
 | `status` | TEXT | Current ticket state: one of `Open`, `In Progress`, `Resolved`, or `Escalated`. |
 | `description` | TEXT | Free-text description of the customer's problem. |
@@ -90,7 +91,7 @@ Stores one row per refund request, linked to both the customer and the original 
 | `refund_reason` | TEXT | Reason for the refund (uses the same values as `support_tickets.issue_type`). |
 | `refund_status` | TEXT | Current status: one of `Requested`, `Approved`, `Rejected`, `Processed`, or `Escalated`. |
 | `requested_at` | TEXT | ISO 8601 date on which the refund was requested. |
-| `processed_at` | TEXT (nullable) | ISO 8601 date on which the refund was processed; NULL when `refund_status` is `Requested` or `Rejected`. |
+| `processed_at` | TEXT (nullable) | ISO 8601 date on which the refund was processed; NULL unless `refund_status` is `Approved` or `Processed`. |
 | `refund_amount` | REAL | Amount refunded in USD; never exceeds the linked order's `amount`. |
 
 ---
@@ -107,31 +108,31 @@ orders     ──< refunds          (orders.order_id       → refunds.order_id)
 
 ---
 
-## Useful SQL Patterns for the SQL Agent
+## Useful SQL Patterns
 
-The SQL Customer Agent uses **predefined, parameterized** versions of the
-patterns below — it does not generate SQL from natural language. These
-snippets are provided only as a human-readable reference for the schema.
+The SQL Customer Agent uses predefined, parameterized tools for these lookup shapes.
+These snippets are provided only as a human-readable reference for the schema and
+maintained query patterns.
 
 ```sql
 -- Customer profile with all tickets
 SELECT c.*, t.*
 FROM customers c
 JOIN support_tickets t ON t.customer_id = c.customer_id
-WHERE LOWER(TRIM(c.full_name)) = 'ema johnson';
+WHERE LOWER(TRIM(c.full_name)) = LOWER(TRIM(:name));
 
 -- Open support tickets for a customer
 SELECT t.*
 FROM support_tickets t
 JOIN customers c ON c.customer_id = t.customer_id
-WHERE LOWER(TRIM(c.full_name)) = 'ema johnson'
+WHERE LOWER(TRIM(c.full_name)) = LOWER(TRIM(:name))
   AND LOWER(t.status) = 'open';
 
 -- Refund-related support tickets for a customer
 SELECT t.*
 FROM support_tickets t
 JOIN customers c ON c.customer_id = t.customer_id
-WHERE LOWER(TRIM(c.full_name)) = 'ema johnson'
+WHERE LOWER(TRIM(c.full_name)) = LOWER(TRIM(:name))
   AND (
        LOWER(t.issue_type)  LIKE '%refund%'
     OR LOWER(t.description) LIKE '%refund%'
