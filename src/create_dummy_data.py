@@ -7,8 +7,8 @@ Three demo customers are seeded deterministically so the SQL Customer Agent
 can reliably answer questions for more than one customer:
 
 - **Ema Johnson**  (customer_id=1) — orders, multiple tickets (open Refund
-  Request, open High-priority Billing Issue, resolved Damaged Product), and
-  one approved refund.
+  Request, open Shipping Delay, open High-priority Billing Issue, resolved
+  Damaged Product), and one approved refund.
 - **Daniel Smith** (customer_id=2) — open Shipping Delay ticket and a
   resolved Account Update ticket.
 - **Priya Patel**  (customer_id=3) — open High-priority warranty replacement
@@ -56,6 +56,7 @@ CUSTOMER_STATUSES = ["Active", "Active", "Active", "Inactive", "Suspended"]
 ISSUE_TYPES = [
     "Refund Request",
     "Damaged Product",
+    "Warranty Claim",
     "Login Issue",
     "Billing Issue",
     "Subscription Change",
@@ -339,7 +340,7 @@ _PRIYA_TICKETS: list[tuple] = [
     #  description, resolution, agent_name)
     (
         7, 3, "2025-04-08",
-        "Damaged Product", "High", "Open",
+        "Warranty Claim", "High", "Open",
         "Smart Watch arrived with a cracked screen — requesting a warranty "
         "replacement under the standard product warranty.",
         None,  # resolution NULL — ticket is open
@@ -531,7 +532,7 @@ _INDEXES = [
 _DEMO_QUESTIONS = [
     "Give me a quick overview of customer Ema Johnson's profile and past support ticket details.",
     "Show me Daniel Smith's open support tickets.",
-    "Give me Priya Patel's support ticket history.",
+    "Give me a quick overview of customer Priya Patel's profile and past support ticket details.",
     "Show me Priya Patel's refund-related tickets.",
     "Are there any high-priority open tickets?",
     "Can Ema Johnson get a refund based on her support history and the refund policy?",

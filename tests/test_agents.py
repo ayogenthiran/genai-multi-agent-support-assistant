@@ -11,6 +11,7 @@ from src.agents.customer_names import match_known_customer
 from src.agents.rag_agent import create_rag_agent, run_rag_lookup
 from src.agents.response_agent import (
     _ensure_policy_sources,
+    _format_sql_support_summary,
     create_response_agent,
     synthesize_response,
 )
@@ -204,6 +205,142 @@ def test_rag_lookup_without_documents_returns_guidance(
 def test_response_agent_general_fallback() -> None:
     answer = synthesize_response(GENERAL_QUERY, route="general")
     assert "support assistant" in answer.lower()
+
+
+def test_response_agent_formats_ema_sql_summary(seeded_db: Path) -> None:
+    sql_result = run_sql_lookup(SQL_QUERY)
+
+    answer = synthesize_response(SQL_QUERY, route="sql", sql_result=sql_result)
+
+    assert "Customer support summary:" not in answer
+    assert "Customer overview:" in answer
+    assert f"Full name: {EMA_JOHNSON}" in answer
+    assert "Customer tier: Premium" in answer
+    assert "Ticket summary:" in answer
+    assert "Recommended next action:" not in answer
+    assert "Suggested support focus:" not in answer
+    assert "Priority focus:" not in answer
+    assert "Billing Issue" in answer
+    assert (
+        "* Billing Issue  \n"
+        "  Status: Open | Priority: High  \n"
+        "  Description: Double-charged for the Bluetooth Speaker replacement "
+        "— needs urgent refund review.  \n"
+        "  Resolution: Not yet available."
+    ) in answer
+    assert (
+        "* Damaged Product  \n"
+        "  Status: Resolved | Priority: High  \n"
+        "  Description: Received a damaged Laptop Stand — the corner was "
+        "cracked on arrival.  \n"
+        "  Resolution: Replacement unit shipped; prepaid return label sent via email."
+    ) in answer
+    assert "Resolution: Not yet available.\n\n* Damaged Product" in answer
+    assert "| Status:" not in answer
+    assert "| Description:" not in answer
+    assert '"lookup_type"' not in answer
+    assert '"tickets"' not in answer
+
+
+def test_response_agent_formats_open_ticket_sql_summary(seeded_db: Path) -> None:
+    query = f"Show me {DANIEL_SMITH}'s open support tickets."
+    sql_result = run_sql_lookup(query)
+
+    answer = _format_sql_support_summary(sql_result)
+
+    assert answer is not None
+    assert "Customer overview:" in answer
+    assert "Ticket summary:" in answer
+    assert "Ticket details:" in answer
+    assert "Recommended next action:" not in answer
+    assert "Suggested support focus:" not in answer
+    assert "Priority focus:" not in answer
+    assert "* Shipping Delay  \n  Status: Open | Priority: Medium" in answer
+    assert "| Status:" not in answer
+    assert "| Description:" not in answer
+    assert '"result"' not in answer
+    assert '"tickets"' not in answer
+
+
+def test_response_agent_formats_unknown_customer_sql_summary(seeded_db: Path) -> None:
+    query = "Show me Michael Brown's support tickets."
+    sql_result = run_sql_lookup(query)
+
+    answer = synthesize_response(query, route="sql", sql_result=sql_result)
+
+    assert (
+        answer
+        == "No customer found with the name Michael Brown. "
+        "No support tickets were returned."
+    )
+    assert "Customer overview:" not in answer
+    assert "Ticket summary:" not in answer
+    assert "Ticket details:" not in answer
+
+
+def test_response_agent_omits_support_focus_for_resolved_ticket_lookup(
+    seeded_db: Path,
+) -> None:
+    query = f"Show me {PRIYA_PATEL}'s refund-related tickets."
+    sql_result = run_sql_lookup(query)
+
+    answer = _format_sql_support_summary(sql_result)
+
+    assert answer is not None
+    assert "Customer overview:" in answer
+    assert "Relevant support history:" in answer
+    assert "Ticket summary:" not in answer
+    assert "Ticket details:" not in answer
+    assert "Suggested support focus:" not in answer
+    assert "Recommended next action:" not in answer
+    assert '"result"' not in answer
+    assert '"tickets"' not in answer
+
+
+def test_mixed_refund_response_labels_filtered_ticket_history(
+    seeded_db: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    query = (
+        "Can Ema Johnson get a refund based on her support history and the "
+        "refund policy?"
+    )
+    rag_context = (
+        "Policy answer:\n"
+        "Refunds may be approved for damaged products or billing errors when "
+        "the request meets the policy window and evidence requirements.\n\n"
+        "Sources: refund_policy.pdf (page 1)"
+    )
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+
+    from src.config import get_settings
+
+    get_settings.cache_clear()
+    try:
+        sql_result = run_sql_lookup(query)
+        answer = synthesize_response(
+            query,
+            route="both",
+            sql_result=sql_result,
+            rag_context=rag_context,
+        )
+    finally:
+        get_settings.cache_clear()
+
+    assert "Relevant support history:" in answer
+    assert "Support History" not in answer
+    assert "Total tickets" not in answer
+    assert (
+        "- Billing Issue: Open, High priority — double-charged for "
+        "Bluetooth Speaker replacement."
+    ) in answer
+    assert (
+        "- Refund Request: Open, Medium priority — requesting a full refund "
+        "for the damaged Laptop Stand."
+    ) in answer
+    assert '"lookup_type"' not in answer
+    assert '"tickets"' not in answer
+    assert "Policy guidance:" in answer
 
 
 def test_response_agent_preserves_policy_sources() -> None:

@@ -104,9 +104,16 @@ RESPONSE_SYNTHESIS_PROMPT = ChatPromptTemplate.from_messages(
             "system",
             "You write concise, professional replies for customer support executives.\n"
             "Use the provided customer data and/or policy guidance when available.\n"
-            "Be practical, accurate, and action-oriented.\n"
+            "Be practical, accurate, and clear.\n"
             "Explicitly state whether the answer is based on customer data, "
             "policy documents, or both.\n"
+            "When customer data is provided, summarize it in natural language "
+            "with short paragraphs and bullets. Never expose raw JSON.\n"
+            "If customer data is labeled Relevant support history, preserve that "
+            "label and do not call the returned filtered tickets the customer's "
+            "total ticket count.\n"
+            "For SQL/customer-data responses, do not add recommendations, next actions, "
+            "or prioritization advice unless the user explicitly asks for them.\n"
             "Do not invent facts that are not supported by the provided context.",
         ),
         (
