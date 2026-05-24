@@ -25,12 +25,12 @@ data/*.sqlite3
 data/chroma/
 chroma_db/
 
-# Policy PDFs (regenerated locally or uploaded via Streamlit)
-# Keep small demo samples in data/policies/sample/
+# Policy PDFs (keep the intended demo samples, ignore ad hoc uploads)
 data/policies/*
 !data/policies/.gitkeep
-!data/policies/sample/
-!data/policies/sample/**
+!data/policies/refund_policy.pdf
+!data/policies/shipping_policy.pdf
+!data/policies/warranty_policy.pdf
 
 # Local tooling
 .codacy/
