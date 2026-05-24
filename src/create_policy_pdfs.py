@@ -1,10 +1,4 @@
-"""Generate synthetic demo policy PDFs for the RAG pipeline.
-
-Writes the synthetic refund, shipping, and warranty PDFs to `data/policies/`.
-Run once during local setup, before indexing documents:
-
-    python -m src.create_policy_pdfs
-"""
+"""Generate synthetic demo policy PDFs for the RAG pipeline."""
 
 from __future__ import annotations
 

@@ -1,9 +1,4 @@
-"""SQLite database access layer for customer support data.
-
-Provides SQLAlchemy engine/session helpers and ORM schema definitions for all
-five tables: customers, orders, support_tickets, subscriptions, and refunds.
-Raw-SQL tools in sql_tools.py use text() queries over the same connection.
-"""
+"""SQLite database models and session helpers."""
 
 from __future__ import annotations
 

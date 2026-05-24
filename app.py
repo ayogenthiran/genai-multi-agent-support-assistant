@@ -1,11 +1,4 @@
-"""Streamlit entry point for the GenAI Multi-Agent Customer Support Assistant.
-
-This module hosts the chat UI, wires up the LangGraph workflow, and displays
-agent routing plus final responses.
-
-Run locally (project virtualenv — Python 3.10+ required):
-    .venv/bin/streamlit run app.py
-"""
+"""Streamlit chat UI for the multi-agent customer support assistant."""
 
 from __future__ import annotations
 

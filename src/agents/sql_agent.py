@@ -1,19 +1,4 @@
-"""SQL Customer Agent: routes natural-language questions to predefined SQL tools.
-
-The agent does **not** generate raw SQL. Instead it inspects the user query,
-extracts a customer name when needed, and invokes one of a small set of
-predefined, parameterized SQL lookups exposed by the MCP-style tool layer:
-
-- ``customer_profile_lookup`` + ``customer_ticket_lookup`` — profile and full
-  support ticket history for a customer.
-- ``open_ticket_lookup`` — open support tickets for a customer.
-- ``refund_ticket_lookup`` — refund-related support tickets for a customer.
-- ``high_priority_open_ticket_lookup`` — High/Critical open tickets, optionally
-  filtered by customer name.
-
-This keeps the SQL layer deterministic, safe, and aligned with the
-assignment's customer-support use cases.
-"""
+"""SQL agent that maps support questions to predefined database tools."""
 
 from __future__ import annotations
 
@@ -140,11 +125,7 @@ def _name_required_payload(lookup_type: str, query: str) -> dict[str, Any]:
 
 
 def run_sql_lookup(query: str) -> str:
-    """Execute the appropriate predefined SQL tool for the given query.
-
-    Returns a JSON string describing the lookup performed and the result
-    payload — never raw SQL or model-generated SQL.
-    """
+    """Execute the matching predefined SQL tool and return JSON."""
     cleaned_query = query.strip()
     intent = _classify_sql_intent(cleaned_query)
 

@@ -1,9 +1,4 @@
-"""Supervisor agent: routes user queries to specialist agents.
-
-Analyzes intent (account lookup, policy question, mixed) and decides whether
-to invoke the SQL agent, RAG agent, both, or the response agent for general
-queries.
-"""
+"""Supervisor agent that routes queries to SQL, RAG, or response nodes."""
 
 from __future__ import annotations
 

@@ -1,8 +1,4 @@
-"""Chroma vector store for embedded policy document chunks (implementation layer).
-
-Handles chunking, embedding, and persistence. Query-time search is in
-retriever.py; MCP/agent exposure is in tools/document_tools.py.
-"""
+"""Chroma vector store helpers for policy document chunks."""
 
 from __future__ import annotations
 

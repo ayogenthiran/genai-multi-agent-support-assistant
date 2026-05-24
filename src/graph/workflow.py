@@ -1,8 +1,4 @@
-"""LangGraph workflow orchestrating the multi-agent support pipeline.
-
-Defines graph state, nodes (supervisor, SQL, RAG, response), conditional edges,
-and compilation into an invokable graph used by app.py.
-"""
+"""LangGraph workflow for the multi-agent support pipeline."""
 
 from __future__ import annotations
 
@@ -131,13 +127,7 @@ def build_support_graph() -> Any:
 
 
 def run_multi_agent_workflow(user_query: str) -> dict[str, Any]:
-    """Run the compiled LangGraph workflow for a single user query.
-
-    Always returns a dict with the same shape regardless of route or failure:
-    ``final_answer``, ``agent_used``, ``route``, ``sql_result``, ``rag_result``,
-    ``error``. On a failure the ``error`` field carries the exception message
-    and ``final_answer`` is left as ``None`` so callers can render a fallback.
-    """
+    """Run the support workflow for one user query."""
     initial_state: SupportState = {
         "user_query": user_query,
         "query": user_query,

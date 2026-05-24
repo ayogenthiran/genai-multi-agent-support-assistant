@@ -1,21 +1,4 @@
-"""MCP-style local tool layer for customer support agents.
-
-This module is a lightweight, assignment-friendly tool registry — not a full
-production MCP deployment. It standardizes how LangGraph agents (and optional
-external MCP hosts) access backend capabilities.
-
-Design goals:
-- Keep SQL lookups and RAG retrieval modular: agents call tools here instead of
-  importing database or vector-store code directly.
-- Delegate implementation to ``src/tools/sql_tools.py`` (structured data) and
-  ``src/tools/document_tools.py`` (policy search / ingestion).
-- Expose every tool through plain Python callables, a name-based registry,
-  LangChain ``@tool`` wrappers, and an optional FastMCP server for stdio
-  transport — without requiring a separate MCP process for the Streamlit demo.
-
-Run locally as an MCP server (stdio, optional):
-    python -m src.mcp_server.server
-"""
+"""MCP-style local tool registry for support agents."""
 
 from __future__ import annotations
 
@@ -39,11 +22,6 @@ from src.tools.sql_tools import (
 )
 
 ToolCallable = Callable[..., Any]
-
-# ---------------------------------------------------------------------------
-# Tool implementations — thin wrappers over sql_tools / document_tools
-# ---------------------------------------------------------------------------
-
 
 def customer_profile_lookup(name: str) -> dict[str, Any]:
     """Look up a customer profile by name (case-insensitive)."""
@@ -89,13 +67,6 @@ def high_priority_open_ticket_lookup(name: str | None = None) -> dict[str, Any]:
     """Return high-priority open tickets, optionally filtered by customer name."""
     return get_high_priority_open_tickets(name)
 
-
-# Document tools are imported directly from document_tools.py (no extra wrapper).
-
-
-# ---------------------------------------------------------------------------
-# Local tool registry — agents can resolve tools by name without MCP transport
-# ---------------------------------------------------------------------------
 
 TOOL_REGISTRY: dict[str, ToolCallable] = {
     "customer_profile_lookup": customer_profile_lookup,

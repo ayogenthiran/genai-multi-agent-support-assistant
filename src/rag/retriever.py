@@ -1,8 +1,4 @@
-"""Retriever for policy RAG at query time (implementation layer).
-
-Provides query rewriting, similarity search with lightweight reranking, and
-grounded answer generation. MCP/agents call tools/document_tools.py.
-"""
+"""Policy RAG retrieval and grounded answer generation."""
 
 from __future__ import annotations
 
@@ -60,13 +56,7 @@ def _keyword_overlap_score(query: str, text: str) -> float:
 
 
 def _infer_query_policy_types(query: str) -> set[str]:
-    """Infer preferred policy_type categories from the user query.
-
-    Returns the set of policy_type values (e.g. ``{"refund"}``) that the
-    query clearly references via keyword cues. Mixed queries can return
-    multiple types; general queries return an empty set so the caller can
-    fall back to plain semantic reranking.
-    """
+    """Infer policy categories mentioned by the user query."""
     text = query.lower()
     matched: set[str] = set()
     for policy_type, keywords in POLICY_TYPE_KEYWORDS.items():

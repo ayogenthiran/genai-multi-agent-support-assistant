@@ -1,8 +1,4 @@
-"""Response agent: composes the final customer-facing reply.
-
-Merges outputs from the SQL and RAG agents into a single coherent support
-message with appropriate tone, source attribution, and next steps.
-"""
+"""Response agent that synthesizes SQL and RAG outputs."""
 
 from __future__ import annotations
 

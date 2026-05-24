@@ -1,8 +1,4 @@
-"""RAG agent: answers questions using retrieved policy and FAQ documents.
-
-Calls MCP-style policy tools to search documents and produce grounded answers
-for support executives.
-"""
+"""RAG agent that answers policy questions using indexed documents."""
 
 from __future__ import annotations
 

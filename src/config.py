@@ -1,9 +1,4 @@
-"""Application configuration loaded from environment variables.
-
-Uses pydantic-settings to validate paths, model names, and RAG parameters.
-Centralizes all `.env` values so agents, tools, and the UI share one source
-of truth.
-"""
+"""Application settings loaded from environment variables."""
 
 from __future__ import annotations
 

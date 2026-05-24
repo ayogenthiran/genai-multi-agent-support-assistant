@@ -1,8 +1,4 @@
-"""Load policy PDFs for RAG indexing (implementation layer).
-
-Extracts page-level text with PyMuPDF. Chunking and embedding happen in
-vector_store.py. MCP/agents call tools/document_tools.py, not this module.
-"""
+"""Load policy PDF pages for RAG indexing."""
 
 from __future__ import annotations
 

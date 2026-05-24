@@ -1,16 +1,4 @@
-"""MCP- and agent-facing document search tools (thin wrapper layer).
-
-This module is the *public tool surface*: LangChain @tool functions registered
-with agents and the MCP server. It should NOT reimplement RAG logic.
-
-Implementation lives in `src/rag/`:
-  - document_loader.py → load PDF pages from policy files
-  - vector_store.py    → chunk, embed, and persist to ChromaDB
-  - retriever.py       → query rewrite, search, rerank, and grounded answers
-
-Import from rag/ here and expose pdf_ingestion, policy_document_search, and
-policy_question_answer as MCP-style tools.
-"""
+"""Document tools exposed to agents and the MCP server."""
 
 from __future__ import annotations
 
@@ -49,12 +37,7 @@ def policy_document_search(query: str) -> str:
 
 
 def policy_question_answer(query: str) -> dict[str, Any]:
-    """Answer a policy question using retrieved document context.
-
-    Returns a structured payload with the grounded answer, source references,
-    the rewritten search query, and the number of retrieved context chunks
-    so callers (agents, UI, MCP clients) can render or audit the RAG result.
-    """
+    """Answer a policy question and return structured source metadata."""
     result = _answer_policy_question(query)
     return {
         "answer": str(result.get("answer", "")).strip(),

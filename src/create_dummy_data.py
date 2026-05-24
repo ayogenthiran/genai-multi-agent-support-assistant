@@ -1,24 +1,4 @@
-"""Seed script – creates data/customers.db with synthetic customer support data.
-
-Populates five tables (customers, orders, support_tickets, subscriptions, refunds)
-with realistic Faker-generated data using only the standard library and Faker.
-
-Three demo customers are seeded deterministically so the SQL Customer Agent
-can reliably answer questions for more than one customer:
-
-- **Ema Johnson**  (customer_id=1) — orders, multiple tickets (open Refund
-  Request, open Shipping Delay, open High-priority Billing Issue, resolved
-  Damaged Product), and one approved refund.
-- **Daniel Smith** (customer_id=2) — open Shipping Delay ticket and a
-  resolved Account Update ticket.
-- **Priya Patel**  (customer_id=3) — open High-priority warranty replacement
-  ticket and a resolved Refund Request ticket.
-
-Usage:
-    python src/create_dummy_data.py
-    # or
-    python -m src.create_dummy_data
-"""
+"""Create data/customers.db with synthetic customer support data."""
 
 from __future__ import annotations
 
@@ -28,10 +8,6 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from faker import Faker
-
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
 
 DB_PATH = Path(__file__).resolve().parents[1] / "data" / "customers.db"
 
@@ -44,10 +20,6 @@ N_REFUNDS = 18
 random.seed(42)
 Faker.seed(42)
 fake = Faker()
-
-# ---------------------------------------------------------------------------
-# Enum sets
-# ---------------------------------------------------------------------------
 
 TIERS = ["Basic", "Premium", "Enterprise"]
 # Weighted toward Active so queries for active customers return meaningful results
@@ -125,10 +97,6 @@ PRODUCTS: list[tuple[str, str]] = [
     ("Puzzle Game", "Toys"),
 ]
 
-# ---------------------------------------------------------------------------
-# Date helpers
-# ---------------------------------------------------------------------------
-
 TODAY = date.today()
 START_SIGNUP = date(2024, 1, 1)
 END_SIGNUP = date(2025, 12, 31)
@@ -155,10 +123,6 @@ def _date_after(base_date_str: str, min_days: int = 1, max_days: int = 30) -> st
     offset = timedelta(days=random.randint(min_days, max_days))
     return min(base + offset, TODAY).isoformat()
 
-
-# ---------------------------------------------------------------------------
-# SQL schema (DROP + CREATE executed via executescript)
-# ---------------------------------------------------------------------------
 
 _DROP_TABLES = """
 DROP TABLE IF EXISTS refunds;
@@ -366,18 +330,9 @@ _EMA_REFUNDS: list[tuple] = [
 
 _RESERVED_REFUNDS: list[tuple] = _EMA_REFUNDS
 
-# ---------------------------------------------------------------------------
-# Generators for bulk random data
-# ---------------------------------------------------------------------------
-
 
 def _generate_customers() -> list[tuple]:
-    """Generate random customers for IDs starting after the reserved demo set.
-
-    The reserved demo customers (Ema Johnson, Daniel Smith, Priya Patel) are
-    prepended separately, so this only fills IDs ``len(_RESERVED_CUSTOMERS)+1``
-    through ``N_CUSTOMERS``.
-    """
+    """Generate random customers after the reserved demo records."""
     rows: list[tuple] = []
     first_id = len(_RESERVED_CUSTOMERS) + 1
     for cid in range(first_id, N_CUSTOMERS + 1):
@@ -395,10 +350,7 @@ def _generate_customers() -> list[tuple]:
 
 
 def _generate_orders(cust_ids: list[int]) -> list[tuple]:
-    """Generate random orders for non-reserved customers.
-
-    IDs continue after the reserved order IDs (Ema's seeded orders).
-    """
+    """Generate random orders after the reserved demo orders."""
     rows: list[tuple] = []
     first_id = len(_RESERVED_ORDERS) + 1
     for oid in range(first_id, N_ORDERS + 1):
@@ -417,15 +369,7 @@ def _generate_orders(cust_ids: list[int]) -> list[tuple]:
 
 
 def _generate_tickets(cust_ids: list[int]) -> list[tuple]:
-    """Generate random tickets for non-reserved customers.
-
-    IDs continue after the reserved demo tickets (Ema + Daniel + Priya).
-
-    Enforces logical-consistency rules:
-    - Resolved tickets always have a non-NULL resolution and an agent_name.
-    - In Progress and Escalated tickets always have an agent_name, NULL resolution.
-    - Open tickets have NULL resolution; agent_name is NULL roughly half the time.
-    """
+    """Generate random tickets after the reserved demo tickets."""
     rows: list[tuple] = []
     first_id = len(_RESERVED_TICKETS) + 1
     for tid in range(first_id, N_TICKETS + 1):
@@ -473,14 +417,7 @@ def _generate_subscriptions(all_cust_ids: list[int]) -> list[tuple]:
 
 
 def _generate_refunds(extra_orders: list[tuple]) -> list[tuple]:
-    """Generate refunds linked to randomly sampled non-reserved orders.
-
-    IDs continue after the reserved demo refunds.
-
-    Enforces logical-consistency rules:
-    - processed_at is non-NULL only when refund_status is Processed or Approved.
-    - refund_amount does not exceed the linked order's amount.
-    """
+    """Generate refunds for randomly sampled non-reserved orders."""
     # extra_orders tuple layout: (order_id[0], customer_id[1], order_date[2],
     #   product_name[3], category[4], amount[5], payment_status[6], delivery_status[7])
     pool = [(row[0], row[1], row[5]) for row in extra_orders]  # (order_id, cust_id, amount)
@@ -506,10 +443,6 @@ def _generate_refunds(extra_orders: list[tuple]) -> list[tuple]:
     return rows
 
 
-# ---------------------------------------------------------------------------
-# Index definitions
-# ---------------------------------------------------------------------------
-
 _INDEXES = [
     "CREATE INDEX idx_customers_full_name ON customers(full_name)",
     "CREATE INDEX idx_support_tickets_customer_id ON support_tickets(customer_id)",
@@ -525,10 +458,6 @@ _INDEXES = [
     "CREATE INDEX idx_refunds_order_id ON refunds(order_id)",
 ]
 
-# ---------------------------------------------------------------------------
-# Demo questions
-# ---------------------------------------------------------------------------
-
 _DEMO_QUESTIONS = [
     "Give me a quick overview of customer Ema Johnson's profile and past support ticket details.",
     "Show me Daniel Smith's open support tickets.",
@@ -537,10 +466,6 @@ _DEMO_QUESTIONS = [
     "Are there any high-priority open tickets?",
     "Can Ema Johnson get a refund based on her support history and the refund policy?",
 ]
-
-# ---------------------------------------------------------------------------
-# Sanity check
-# ---------------------------------------------------------------------------
 
 
 def _print_reserved_customer(cur: sqlite3.Cursor, customer_id: int, name: str) -> None:
@@ -619,27 +544,17 @@ def _run_sanity_check(db_path: Path) -> None:
     conn.close()
 
 
-# ---------------------------------------------------------------------------
-# Main entry point
-# ---------------------------------------------------------------------------
-
 
 def create_dummy_data(db_path: Path = DB_PATH) -> Path:
-    """Drop existing tables, recreate schema, seed data, create indexes, sanity check.
-
-    Returns the resolved path of the SQLite database that was created, so
-    callers (including the test suite) can point ``SQLITE_DB_PATH`` at it.
-    """
+    """Create the SQLite demo database and return its path."""
     db_path = Path(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
     conn = sqlite3.connect(db_path)
     conn.execute("PRAGMA foreign_keys = ON")
 
-    # Drop in reverse dependency order, then recreate
     conn.executescript(_DROP_TABLES + _CREATE_TABLES)
 
-    # Generate bulk data (deterministic — seed is fixed above)
     extra_customers = _generate_customers()
     all_customers = list(_RESERVED_CUSTOMERS) + extra_customers
 
@@ -683,7 +598,6 @@ def create_dummy_data(db_path: Path = DB_PATH) -> Path:
 
     conn.close()
 
-    # Summary
     print("\n=== Database created ===")
     print(f"  Path             : {db_path}")
     print(f"  customers        : {len(all_customers)}")

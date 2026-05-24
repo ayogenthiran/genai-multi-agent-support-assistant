@@ -1,8 +1,4 @@
-"""SQL tools for querying the customer support database.
-
-Exposes reusable query functions and LangChain @tool wrappers for customer
-lookup and ticket retrieval against the configured SQLite database.
-"""
+"""SQL tools for querying customer profiles and tickets."""
 
 from __future__ import annotations
 
@@ -83,12 +79,7 @@ def _empty_name_response(message: str = "Please provide a customer name.") -> di
 
 
 def _run_named_ticket_query(name: str, query: str, *, label: str) -> dict[str, Any]:
-    """Run a parameterized ticket SQL query keyed by customer name.
-
-    Returns a clean dict with ``tickets``, ``count`` and an optional ``message``.
-    The query must accept a single ``:name`` parameter and project the
-    ticket columns selected by the SQL constants above.
-    """
+    """Run a named ticket query and return a normalized payload."""
     cleaned_name = name.strip()
     if not cleaned_name:
         return _empty_name_response()
@@ -126,11 +117,7 @@ def _run_named_ticket_query(name: str, query: str, *, label: str) -> dict[str, A
 
 
 def get_customer_by_name(name: str) -> dict[str, Any]:
-    """Look up a customer by name (case-insensitive, trimmed).
-
-    Returns the customer row as a dict, or ``{"message": ...}`` when the
-    customer is not found or a database error occurs.
-    """
+    """Look up a customer by trimmed, case-insensitive name."""
     cleaned_name = name.strip()
     if not cleaned_name:
         return {"message": "Please provide a customer name."}
@@ -214,11 +201,7 @@ def get_refund_related_tickets(name: str) -> dict[str, Any]:
 
 
 def get_high_priority_open_tickets(name: str | None = None) -> dict[str, Any]:
-    """Return open tickets whose priority is High or Critical.
-
-    If ``name`` is provided, results are limited to that customer; otherwise
-    high-priority open tickets are returned across all customers.
-    """
+    """Return high-priority open tickets, optionally for one customer."""
     cleaned_name = (name or "").strip()
 
     if cleaned_name:
