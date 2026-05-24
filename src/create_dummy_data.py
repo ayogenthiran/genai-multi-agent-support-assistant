@@ -458,16 +458,6 @@ _INDEXES = [
     "CREATE INDEX idx_refunds_order_id ON refunds(order_id)",
 ]
 
-_DEMO_QUESTIONS = [
-    "Give me a quick overview of customer Ema Johnson's profile and past support ticket details.",
-    "Show me Daniel Smith's open support tickets.",
-    "Give me a quick overview of customer Priya Patel's profile and past support ticket details.",
-    "Show me Priya Patel's refund-related tickets.",
-    "Are there any high-priority open tickets?",
-    "Can Ema Johnson get a refund based on her support history and the refund policy?",
-]
-
-
 def _print_reserved_customer(cur: sqlite3.Cursor, customer_id: int, name: str) -> None:
     """Print the profile, orders, tickets, and refunds for one reserved customer."""
     print(f"\n=== {name} (customer_id={customer_id}) – sanity check ===")
@@ -607,10 +597,6 @@ def create_dummy_data(db_path: Path = DB_PATH) -> Path:
     print(f"  refunds          : {len(all_refunds)}")
 
     _run_sanity_check(db_path)
-
-    print("\n=== Demo questions to test in the chatbot ===")
-    for i, question in enumerate(_DEMO_QUESTIONS, start=1):
-        print(f"  {i:2d}. {question}")
 
     return db_path
 
