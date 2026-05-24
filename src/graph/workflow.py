@@ -29,6 +29,7 @@ class SupportState(TypedDict, total=False):
     rag_result: str | None
     final_answer: str | None
     agent_used: str | None
+    error: str | None
     # Bridge fields used by existing agent node implementations.
     query: str
     rag_context: str | None
@@ -37,10 +38,8 @@ class SupportState(TypedDict, total=False):
 
 
 def _resolve_agent_used(route: RouteType | None) -> str:
-    if route == "both":
-        return "sql,rag"
-    if route in {"sql", "rag", "general"}:
-        return route
+    if route in {"sql", "rag", "both", "general"}:
+        return route  # type: ignore[return-value]
     return "general"
 
 
@@ -134,18 +133,36 @@ def build_support_graph() -> Any:
 
 
 def run_multi_agent_workflow(user_query: str) -> dict[str, Any]:
-    """Run the compiled LangGraph workflow for a single user query."""
-    graph = build_support_graph()
+    """Run the compiled LangGraph workflow for a single user query.
+
+    Always returns a dict with the same shape regardless of route or failure:
+    ``final_answer``, ``agent_used``, ``route``, ``sql_result``, ``rag_result``,
+    ``error``. On a failure the ``error`` field carries the exception message
+    and ``final_answer`` is left as ``None`` so callers can render a fallback.
+    """
     initial_state: SupportState = {
         "user_query": user_query,
         "query": user_query,
     }
-    result = graph.invoke(initial_state)
+
+    try:
+        graph = build_support_graph()
+        result = graph.invoke(initial_state)
+    except Exception as exc:
+        return {
+            "final_answer": None,
+            "agent_used": "general",
+            "route": "general",
+            "sql_result": None,
+            "rag_result": None,
+            "error": str(exc),
+        }
 
     return {
         "final_answer": result.get("final_answer"),
-        "agent_used": result.get("agent_used"),
-        "route": result.get("route"),
+        "agent_used": result.get("agent_used") or _resolve_agent_used(result.get("route")),
+        "route": result.get("route") or "general",
         "sql_result": result.get("sql_result"),
         "rag_result": result.get("rag_result"),
+        "error": None,
     }

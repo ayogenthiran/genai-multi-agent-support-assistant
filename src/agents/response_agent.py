@@ -9,16 +9,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
 from src.config import get_settings
-
-_GENERAL_CAPABILITY_REPLY = (
-    "Hello. I am a customer support assistant for support executives. "
-    "I can look up customer profiles and ticket history from the customer database, "
-    "answer policy questions using company policy documents, and combine both when needed. "
-    "Ask about a customer account, open tickets, refunds, warranties, or cancellations."
+from src.prompts.system_prompts import (
+    GENERAL_CAPABILITY_REPLY,
+    RESPONSE_SYNTHESIS_PROMPT,
 )
 
 
@@ -56,7 +52,7 @@ def _fallback_response(
     rag_context: str | None,
 ) -> str:
     if route == "general" and not sql_result and not rag_context:
-        return _GENERAL_CAPABILITY_REPLY
+        return GENERAL_CAPABILITY_REPLY
 
     source = _source_label(route, sql_result, rag_context)
     sections: list[str] = [
@@ -89,48 +85,32 @@ def synthesize_response(
     """Combine SQL and RAG outputs into one executive-ready answer."""
     cleaned_query = query.strip()
     if route == "general" and not sql_result and not rag_context:
-        return _GENERAL_CAPABILITY_REPLY
+        return GENERAL_CAPABILITY_REPLY
 
     settings = get_settings()
     if not settings.openai_api_key:
         return _fallback_response(cleaned_query, route, sql_result, rag_context)
 
     source = _source_label(route, sql_result, rag_context)
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                "You write concise, professional replies for customer support executives.\n"
-                "Use the provided customer data and/or policy guidance when available.\n"
-                "Be practical, accurate, and action-oriented.\n"
-                "Explicitly state whether the answer is based on customer data, "
-                "policy documents, or both.\n"
-                "Do not invent facts that are not supported by the provided context.",
-            ),
-            (
-                "human",
-                "User question:\n{query}\n\n"
-                "Routing label: {route}\n"
-                "Expected source basis: {source}\n\n"
-                "Customer data context:\n{sql_result}\n\n"
-                "Policy context:\n{rag_context}",
-            ),
-        ]
-    )
-    llm = ChatOpenAI(
-        model=settings.openai_model,
-        api_key=settings.openai_api_key,
-        temperature=0.2,
-    )
-    response = (prompt | llm).invoke(
-        {
-            "query": cleaned_query or "No question provided.",
-            "route": route or "unknown",
-            "source": source,
-            "sql_result": sql_result or "None",
-            "rag_context": rag_context or "None",
-        }
-    )
+    try:
+        llm = ChatOpenAI(
+            model=settings.openai_model,
+            api_key=settings.openai_api_key,
+            temperature=0.2,
+        )
+        response = (RESPONSE_SYNTHESIS_PROMPT | llm).invoke(
+            {
+                "query": cleaned_query or "No question provided.",
+                "route": route or "unknown",
+                "source": source,
+                "sql_result": sql_result or "None",
+                "rag_context": rag_context or "None",
+            }
+        )
+    except Exception:
+        # LLM unavailable mid-demo: render the deterministic fallback so
+        # already-fetched SQL/RAG context still reaches the user.
+        return _fallback_response(cleaned_query, route, sql_result, rag_context)
     return str(response.content).strip()
 
 

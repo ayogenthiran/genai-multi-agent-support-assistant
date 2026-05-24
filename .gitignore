@@ -17,10 +17,21 @@ build/
 htmlcov/
 
 # Generated / local data (folders kept via .gitkeep)
-data/customers.db
+data/*.db
+data/*.sqlite
+data/*.sqlite3
 data/chroma/
-data/policies/*.pdf
-*.sqlite3
+chroma_db/
+
+# Policy PDFs (regenerated locally or uploaded via Streamlit)
+# Keep small demo samples in data/policies/sample/
+data/policies/*
+!data/policies/.gitkeep
+!data/policies/sample/
+!data/policies/sample/**
+
+# Local tooling
+.codacy/
 
 # IDE / OS
 .idea/

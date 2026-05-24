@@ -10,6 +10,8 @@ from collections.abc import Callable
 from typing import Any
 
 from src.mcp_server.server import call_tool
+from src.prompts.system_prompts import RAG_LOOKUP_RESPONSE_TEMPLATE
+from src.tools.document_tools import format_policy_answer
 
 
 def _extract_user_query(state: dict[str, Any]) -> str:
@@ -32,13 +34,12 @@ def run_rag_lookup(query: str) -> str:
     if not cleaned:
         return "Please provide a policy-related question."
 
-    answer = call_tool("policy_question_answer", query=cleaned)
+    answer_payload = call_tool("policy_question_answer", query=cleaned)
     passages = call_tool("policy_document_search", query=cleaned)
-    return (
-        "Policy answer:\n"
-        f"{answer}\n\n"
-        "Supporting policy excerpts:\n"
-        f"{passages}"
+    formatted_answer = format_policy_answer(answer_payload)
+    return RAG_LOOKUP_RESPONSE_TEMPLATE.format(
+        formatted_answer=formatted_answer,
+        passages=passages,
     )
 
 

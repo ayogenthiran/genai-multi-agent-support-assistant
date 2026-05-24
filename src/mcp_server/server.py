@@ -9,10 +9,11 @@ Design goals:
   importing database or vector-store code directly.
 - Delegate implementation to ``src/tools/sql_tools.py`` (structured data) and
   ``src/tools/document_tools.py`` (policy search / ingestion).
-- Expose the same six tools through plain Python callables, a name-based registry,
-  LangChain @tool wrappers, and an optional FastMCP server for stdio transport.
+- Expose every tool through plain Python callables, a name-based registry,
+  LangChain ``@tool`` wrappers, and an optional FastMCP server for stdio
+  transport — without requiring a separate MCP process for the Streamlit demo.
 
-Run locally as an MCP server (stdio):
+Run locally as an MCP server (stdio, optional):
     python -m src.mcp_server.server
 """
 
@@ -24,15 +25,18 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from src.tools.document_tools import (
-    answer_policy_question,
-    search_policy_documents,
+    format_policy_answer,
+    pdf_ingestion,
+    policy_document_search,
+    policy_question_answer,
 )
 from src.tools.sql_tools import (
     get_customer_by_name,
     get_customer_tickets,
+    get_high_priority_open_tickets,
     get_open_tickets,
+    get_refund_related_tickets,
 )
-from src.rag.vector_store import add_document_to_vector_store
 
 ToolCallable = Callable[..., Any]
 
@@ -52,6 +56,7 @@ def customer_ticket_lookup(name: str) -> dict[str, Any]:
     if "customer_id" not in customer:
         return {
             "tickets": [],
+            "count": 0,
             "message": customer.get(
                 "message",
                 f"No customer found with name '{name.strip()}'.",
@@ -61,11 +66,10 @@ def customer_ticket_lookup(name: str) -> dict[str, Any]:
     ticket_result = get_customer_tickets(customer["customer_id"])
     response: dict[str, Any] = {
         "customer_id": customer["customer_id"],
-        "customer_name": customer.get("name"),
+        "customer_name": customer.get("full_name"),
         "tickets": ticket_result.get("tickets", []),
+        "count": ticket_result.get("count", 0),
     }
-    if "count" in ticket_result:
-        response["ticket_count"] = ticket_result["count"]
     if "message" in ticket_result:
         response["message"] = ticket_result["message"]
     return response
@@ -76,19 +80,17 @@ def open_ticket_lookup(name: str) -> dict[str, Any]:
     return get_open_tickets(name)
 
 
-def policy_document_search(query: str) -> str:
-    """Search indexed policy documents and return relevant passages."""
-    return search_policy_documents(query)
+def refund_ticket_lookup(name: str) -> dict[str, Any]:
+    """Return refund-related support tickets for the customer identified by name."""
+    return get_refund_related_tickets(name)
 
 
-def policy_question_answer(query: str) -> str:
-    """Answer a policy question using retrieved document context."""
-    return answer_policy_question(query)
+def high_priority_open_ticket_lookup(name: str | None = None) -> dict[str, Any]:
+    """Return high-priority open tickets, optionally filtered by customer name."""
+    return get_high_priority_open_tickets(name)
 
 
-def pdf_ingestion(file_path: str) -> dict[str, Any]:
-    """Index a policy PDF so it can be searched and used for answers."""
-    return add_document_to_vector_store(file_path)
+# Document tools are imported directly from document_tools.py (no extra wrapper).
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +101,8 @@ TOOL_REGISTRY: dict[str, ToolCallable] = {
     "customer_profile_lookup": customer_profile_lookup,
     "customer_ticket_lookup": customer_ticket_lookup,
     "open_ticket_lookup": open_ticket_lookup,
+    "refund_ticket_lookup": refund_ticket_lookup,
+    "high_priority_open_ticket_lookup": high_priority_open_ticket_lookup,
     "policy_document_search": policy_document_search,
     "policy_question_answer": policy_question_answer,
     "pdf_ingestion": pdf_ingestion,
@@ -119,7 +123,7 @@ def call_tool(name: str, /, **kwargs: Any) -> Any:
 
 
 def get_langchain_tools() -> list[Any]:
-    """Return LangChain @tool wrappers for all registered MCP-style tools."""
+    """Return LangChain ``@tool`` wrappers for all registered MCP-style tools."""
     from langchain_core.tools import tool
 
     @tool
@@ -138,6 +142,16 @@ def get_langchain_tools() -> list[Any]:
         return open_ticket_lookup(name)
 
     @tool
+    def refund_ticket_lookup_tool(name: str) -> dict[str, Any]:
+        """List refund-related support tickets for a customer by name."""
+        return refund_ticket_lookup(name)
+
+    @tool
+    def high_priority_open_ticket_lookup_tool(name: str | None = None) -> dict[str, Any]:
+        """List high-priority open tickets, optionally filtered by customer name."""
+        return high_priority_open_ticket_lookup(name)
+
+    @tool
     def policy_document_search_tool(query: str) -> str:
         """Search indexed company policy documents for relevant passages."""
         return policy_document_search(query)
@@ -145,7 +159,7 @@ def get_langchain_tools() -> list[Any]:
     @tool
     def policy_question_answer_tool(query: str) -> str:
         """Answer a customer policy question using indexed policy documents."""
-        return policy_question_answer(query)
+        return format_policy_answer(policy_question_answer(query))
 
     @tool
     def pdf_ingestion_tool(file_path: str) -> dict[str, Any]:
@@ -156,6 +170,8 @@ def get_langchain_tools() -> list[Any]:
         customer_profile_lookup_tool,
         customer_ticket_lookup_tool,
         open_ticket_lookup_tool,
+        refund_ticket_lookup_tool,
+        high_priority_open_ticket_lookup_tool,
         policy_document_search_tool,
         policy_question_answer_tool,
         pdf_ingestion_tool,
@@ -167,8 +183,9 @@ def create_mcp_server() -> FastMCP:
     mcp = FastMCP(
         name="customer-support-tools",
         instructions=(
-            "Customer support tool layer: SQL-backed customer/ticket lookups "
-            "and RAG-backed policy document search, Q&A, and PDF ingestion."
+            "Customer support tool layer: predefined, parameterized SQL "
+            "lookups for customer profiles and support tickets, plus "
+            "RAG-backed policy document search, Q&A, and PDF ingestion."
         ),
     )
 
@@ -186,6 +203,19 @@ def create_mcp_server() -> FastMCP:
         open_ticket_lookup,
         name="open_ticket_lookup",
         description="List open support tickets for a customer identified by name.",
+    )
+    mcp.add_tool(
+        refund_ticket_lookup,
+        name="refund_ticket_lookup",
+        description="List refund-related support tickets for a customer identified by name.",
+    )
+    mcp.add_tool(
+        high_priority_open_ticket_lookup,
+        name="high_priority_open_ticket_lookup",
+        description=(
+            "List high-priority (High or Critical) open support tickets, "
+            "optionally filtered by customer name."
+        ),
     )
     mcp.add_tool(
         policy_document_search,

@@ -1,8 +1,9 @@
-"""Tests for specialist agent scaffolding and SQL lookups."""
+"""Tests for specialist agents, Ema Johnson SQL lookups, and response synthesis."""
 
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -10,7 +11,15 @@ from src.agents.customer_names import match_known_customer
 from src.agents.rag_agent import create_rag_agent, run_rag_lookup
 from src.agents.response_agent import create_response_agent, synthesize_response
 from src.agents.sql_agent import _extract_customer_name, create_sql_agent, run_sql_lookup
-from src.create_dummy_data import create_dummy_data
+from src.tools.sql_tools import (
+    get_customer_by_name,
+    get_customer_profile_and_tickets,
+    get_high_priority_open_tickets,
+    get_open_tickets,
+    get_refund_related_tickets,
+)
+
+from tests.conftest import EMA_JOHNSON, GENERAL_QUERY, SQL_QUERY
 
 
 @pytest.mark.parametrize(
@@ -18,19 +27,17 @@ from src.create_dummy_data import create_dummy_data
     [
         (
             "Give me a quick overview of customer Ema's profile and past support ticket details.",
-            "Ema Johnson",
+            EMA_JOHNSON,
         ),
-        ("Show me Daniel's open support tickets.", "Daniel Smith"),
+        (f"Show me {EMA_JOHNSON}'s open support tickets.", EMA_JOHNSON),
         (
             "Can Ema get a refund based on her past support ticket and the refund policy?",
-            "Ema Johnson",
+            EMA_JOHNSON,
         ),
+        (f"Show me {EMA_JOHNSON}'s refund-related tickets.", EMA_JOHNSON),
     ],
 )
-def test_extract_customer_name_from_possessive_queries(
-    query: str,
-    expected: str,
-) -> None:
+def test_extract_customer_name_from_ema_queries(query: str, expected: str) -> None:
     assert match_known_customer(query) == expected
     assert _extract_customer_name(query) == expected
 
@@ -45,31 +52,111 @@ def test_specialist_agent_factories_return_callables(factory) -> None:
     assert callable(node)
 
 
-def test_sql_lookup_returns_customer_data(tmp_path) -> None:
-    db_path = create_dummy_data(tmp_path / "customers.db")
-    monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setenv("SQLITE_DB_PATH", str(db_path))
+def test_get_customer_by_name_returns_ema_profile(seeded_db: Path) -> None:
+    customer = get_customer_by_name(EMA_JOHNSON)
+    assert customer["customer_id"] == 1
+    assert customer["full_name"] == EMA_JOHNSON
+    assert customer["customer_tier"] == "Premium"
+
+
+def test_get_customer_profile_and_tickets_returns_ema_history(seeded_db: Path) -> None:
+    result = get_customer_profile_and_tickets(EMA_JOHNSON)
+    assert result["customer"]["customer_id"] == 1
+    assert result["ticket_count"] >= 1
+    issue_types = {ticket["issue_type"] for ticket in result["tickets"]}
+    assert "Refund Request" in issue_types or "Damaged Product" in issue_types
+
+
+def test_get_open_tickets_returns_ema_open_records(seeded_db: Path) -> None:
+    result = get_open_tickets(EMA_JOHNSON)
+    assert result["count"] >= 1
+    assert all(ticket["status"].lower() == "open" for ticket in result["tickets"])
+
+
+def test_get_refund_related_tickets_returns_ema_refund_records(seeded_db: Path) -> None:
+    result = get_refund_related_tickets(EMA_JOHNSON)
+    assert result["count"] >= 1
+    for ticket in result["tickets"]:
+        text = (ticket["issue_type"] + " " + ticket["description"]).lower()
+        assert "refund" in text
+
+
+def test_get_high_priority_open_tickets_scoped_to_ema(seeded_db: Path) -> None:
+    result = get_high_priority_open_tickets(EMA_JOHNSON)
+    assert isinstance(result["tickets"], list)
+    if result["tickets"]:
+        for ticket in result["tickets"]:
+            assert ticket["customer_id"] == 1
+            assert ticket["status"].lower() == "open"
+            assert ticket["priority"].lower() in {"high", "critical"}
+
+
+def test_sql_lookup_returns_ema_profile_and_tickets(seeded_db: Path) -> None:
+    result = run_sql_lookup(SQL_QUERY)
+    payload = json.loads(result)
+    assert payload["lookup_type"] == "profile_and_tickets"
+    assert payload["customer_name"] == EMA_JOHNSON
+    assert payload["profile"]["customer_id"] == 1
+    assert payload["tickets"]["count"] >= 1
+
+
+def test_sql_lookup_routes_ema_open_tickets_query(seeded_db: Path) -> None:
+    result = run_sql_lookup(f"Show me {EMA_JOHNSON}'s open support tickets.")
+    payload = json.loads(result)
+    assert payload["lookup_type"] == "open_tickets"
+    assert payload["customer_name"] == EMA_JOHNSON
+    assert payload["result"]["count"] >= 1
+
+
+def test_sql_lookup_routes_ema_refund_related_tickets(seeded_db: Path) -> None:
+    result = run_sql_lookup(f"Show me {EMA_JOHNSON}'s refund-related tickets.")
+    payload = json.loads(result)
+    assert payload["lookup_type"] == "refund_related_tickets"
+    assert payload["customer_name"] == EMA_JOHNSON
+    assert payload["result"]["count"] >= 1
+
+
+def test_sql_lookup_asks_for_customer_name_when_missing(
+    seeded_db: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "")
 
     from src.config import get_settings
 
     get_settings.cache_clear()
-
     try:
-        result = run_sql_lookup("Show me Ema Johnson's profile and tickets.")
-        payload = json.loads(result)
-        assert payload["customer_name"] == "Ema Johnson"
-        assert payload["profile"]["customer_id"] == 1
-        assert payload["tickets"]["ticket_count"] >= 1
+        result = run_sql_lookup("Show me the open support tickets.")
     finally:
         get_settings.cache_clear()
-        monkeypatch.undo()
+
+    payload = json.loads(result)
+    assert payload["lookup_type"] == "open_tickets"
+    assert "customer" in payload["message"].lower()
+    assert payload["result"]["count"] == 0
 
 
-def test_rag_lookup_without_documents_returns_guidance() -> None:
-    message = run_rag_lookup("What is the refund policy?")
+def test_rag_lookup_without_documents_returns_guidance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chroma_dir = tmp_path / "chroma_db"
+    monkeypatch.setenv("CHROMA_PERSIST_DIR", str(chroma_dir))
+
+    from src.config import get_settings
+    from src.rag.vector_store import reset_vector_store
+
+    get_settings.cache_clear()
+    reset_vector_store(chroma_dir)
+
+    try:
+        message = run_rag_lookup("What is the refund policy?")
+    finally:
+        get_settings.cache_clear()
+
     assert "upload" in message.lower() or "indexed" in message.lower()
 
 
 def test_response_agent_general_fallback() -> None:
-    answer = synthesize_response("Hi, what can you do?", route="general")
+    answer = synthesize_response(GENERAL_QUERY, route="general")
     assert "support assistant" in answer.lower()

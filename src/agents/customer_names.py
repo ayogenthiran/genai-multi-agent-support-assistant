@@ -8,8 +8,6 @@ KNOWN_CUSTOMER_NAMES: tuple[str, ...] = (
     "Ema Johnson",
     "Daniel Smith",
     "Priya Patel",
-    "Michael Brown",
-    "Sara Wilson",
 )
 
 _POSSESSIVE_FIRST_NAME = re.compile(

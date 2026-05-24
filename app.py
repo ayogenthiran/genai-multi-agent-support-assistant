@@ -10,7 +10,6 @@ Run locally (project virtualenv — Python 3.10+ required):
 from __future__ import annotations
 
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -46,22 +45,31 @@ def _ensure_python_version() -> None:
 
 _ensure_python_version()
 
-from src.graph.workflow import run_multi_agent_workflow
-from src.mcp_server.server import pdf_ingestion
+from src.config import get_settings  # noqa: E402
+from src.graph.workflow import run_multi_agent_workflow  # noqa: E402
+from src.mcp_server.server import pdf_ingestion  # noqa: E402
 
 AGENT_LABELS: dict[str, str] = {
     "sql": "SQL Agent",
     "rag": "Policy RAG Agent",
     "both": "Both",
+    # Legacy value emitted by older workflow versions; kept for back-compat.
     "sql,rag": "Both",
     "general": "General Response",
 }
 
+NO_ANSWER_MESSAGE = (
+    "I could not generate an answer for that question. Please try again."
+)
+
 EXAMPLE_QUESTIONS: list[str] = [
+    "Give me a quick overview of customer Ema Johnson's profile and past support ticket details.",
+    "Show me Daniel Smith's open support tickets.",
+    "Give me Priya Patel's support ticket history.",
+    "Show me Priya Patel's refund-related tickets.",
+    "Are there any high-priority open tickets?",
+    "Can Ema Johnson get a refund based on her support history and the refund policy?",
     "What is the current refund policy?",
-    "Give me a quick overview of customer Ema's profile and past support ticket details.",
-    "Can Ema get a refund based on her past support ticket and the refund policy?",
-    "Show me Ema's open support tickets.",
     "What does the warranty policy say?",
     "Hi, what can you do?",
 ]
@@ -87,10 +95,10 @@ def _format_agent_used(result: dict[str, Any]) -> str:
 
 
 def _save_uploaded_pdf(uploaded_file: Any) -> Path:
-    temp_dir = Path(tempfile.gettempdir()) / "genai-support-assistant"
-    temp_dir.mkdir(parents=True, exist_ok=True)
+    policies_dir = get_settings().policies_dir
+    policies_dir.mkdir(parents=True, exist_ok=True)
     safe_name = Path(uploaded_file.name).name
-    file_path = temp_dir / safe_name
+    file_path = policies_dir / safe_name
     file_path.write_bytes(uploaded_file.getbuffer())
     return file_path
 
@@ -118,13 +126,14 @@ def _run_workflow(user_query: str) -> tuple[str, str]:
     except Exception:
         return DEFAULT_ERROR_MESSAGE, AGENT_LABELS["general"]
 
-    final_answer = str(result.get("final_answer") or "").strip()
     agent_used = _format_agent_used(result)
+    error = result.get("error")
+    final_answer = str(result.get("final_answer") or "").strip()
+
+    if error:
+        return f"{DEFAULT_ERROR_MESSAGE}\n\nDetails: {error}", agent_used
     if not final_answer:
-        return (
-            "I could not generate an answer for that question. Please try again.",
-            agent_used,
-        )
+        return NO_ANSWER_MESSAGE, agent_used
     return final_answer, agent_used
 
 
@@ -159,7 +168,7 @@ def _render_sidebar() -> None:
         uploaded_file = st.file_uploader(
             "Upload policy PDF",
             type=["pdf"],
-            help="PDFs are saved temporarily and indexed into the vector store.",
+            help="PDFs are saved to data/policies/ and indexed into ChromaDB.",
         )
 
         if st.button("Process Policy PDF", use_container_width=True):
@@ -210,9 +219,12 @@ def main() -> None:
 
     st.title(PAGE_TITLE)
     st.markdown(
-        "Welcome, **John**. Ask questions about customer SQL data (profiles, tickets, "
-        "and account history) and uploaded company policy PDFs. The supervisor routes "
-        "each question to the SQL agent, the policy RAG agent, both, or a general reply."
+        "Ask about a customer's profile and support ticket history, their open or "
+        "refund-related tickets, high-priority open tickets, or company policies "
+        "from uploaded PDFs. The SQL Customer Agent uses predefined, parameterized "
+        "SQL queries (no LLM-generated SQL); the Policy RAG Agent answers from "
+        "indexed policy documents. The supervisor routes each question to the SQL "
+        "agent, the policy RAG agent, both, or a general reply."
     )
 
     _render_chat_history()

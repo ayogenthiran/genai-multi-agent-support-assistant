@@ -11,11 +11,11 @@ import re
 from collections.abc import Callable
 from typing import Any, Literal
 
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
 from src.agents.customer_names import match_known_customer
 from src.config import get_settings
+from src.prompts.system_prompts import SUPERVISOR_ROUTING_PROMPT
 
 RouteType = Literal["sql", "rag", "both", "general"]
 
@@ -24,19 +24,29 @@ SQL_KEYWORDS: tuple[str, ...] = (
     "profile",
     "ticket",
     "tickets",
-    "order",
-    "orders",
     "account",
     "history",
-    "purchase",
-    "billing",
-    "subscription",
     "open issue",
     "support case",
+    "high priority",
+    "high-priority",
+)
+
+# Words that signal the question is about a *ticket* record rather than a
+# policy lookup. When these dominate the query, we prefer the SQL route even
+# if a generic policy-domain word like "refund" appears.
+SQL_BIAS_KEYWORDS: tuple[str, ...] = (
+    "ticket",
+    "tickets",
+    "open ticket",
+    "open tickets",
+    "support case",
+    "support history",
 )
 
 RAG_KEYWORDS: tuple[str, ...] = (
     "policy",
+    "policies",
     "refund",
     "warranty",
     "cancellation",
@@ -47,6 +57,20 @@ RAG_KEYWORDS: tuple[str, ...] = (
     "terms",
     "return",
     "exchange",
+    "guarantee",
+    "coverage",
+)
+
+# Words that explicitly invoke a policy document, used to keep mixed
+# refund-eligibility questions routed to "both".
+POLICY_DOC_KEYWORDS: tuple[str, ...] = (
+    "policy",
+    "policies",
+    "warranty",
+    "document",
+    "documents",
+    "faq",
+    "terms",
     "guarantee",
     "coverage",
 )
@@ -93,13 +117,21 @@ def classify_query(query: str, *, use_llm: bool = True) -> RouteType:
     if not cleaned:
         return "general"
 
+    normalized = _normalize(cleaned)
     sql_hits = _keyword_hits(cleaned, SQL_KEYWORDS)
     if _mentions_customer(cleaned):
         sql_hits += 1
     rag_hits = _keyword_hits(cleaned, RAG_KEYWORDS)
     general_hits = _keyword_hits(cleaned, GENERAL_KEYWORDS)
 
+    has_sql_bias = any(keyword in normalized for keyword in SQL_BIAS_KEYWORDS)
+    has_policy_doc_cue = any(keyword in normalized for keyword in POLICY_DOC_KEYWORDS)
+
     if sql_hits and rag_hits:
+        if has_policy_doc_cue:
+            return "both"
+        if has_sql_bias:
+            return "sql"
         return "both"
     if sql_hits:
         return "sql"
@@ -111,7 +143,12 @@ def classify_query(query: str, *, use_llm: bool = True) -> RouteType:
     if use_llm:
         settings = get_settings()
         if settings.openai_api_key:
-            return _llm_classify_query(cleaned)
+            try:
+                return _llm_classify_query(cleaned)
+            except Exception:
+                # LLM unavailable (network, auth, quota): fall back to "general"
+                # so the workflow still produces a response.
+                return "general"
 
     return "general"
 
@@ -119,27 +156,12 @@ def classify_query(query: str, *, use_llm: bool = True) -> RouteType:
 def _llm_classify_query(query: str) -> RouteType:
     """Use the configured LLM when keyword routing is inconclusive."""
     settings = get_settings()
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                "You route customer support queries for a support executive assistant.\n"
-                "Return exactly one label: sql, rag, both, or general.\n"
-                "- sql: customer/profile/ticket/order/account/history lookups\n"
-                "- rag: policy/refund/warranty/cancellation/document questions\n"
-                "- both: mixed questions needing customer data and policy guidance\n"
-                "- general: greetings, capability questions, or small talk\n"
-                "Reply with only the label.",
-            ),
-            ("human", "{query}"),
-        ]
-    )
     llm = ChatOpenAI(
         model=settings.openai_model,
         api_key=settings.openai_api_key,
         temperature=0,
     )
-    response = (prompt | llm).invoke({"query": query})
+    response = (SUPERVISOR_ROUTING_PROMPT | llm).invoke({"query": query})
     content = str(response.content).strip().lower()
     match = _ROUTE_PATTERN.search(content)
     if match:

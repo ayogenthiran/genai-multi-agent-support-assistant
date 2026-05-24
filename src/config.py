@@ -38,7 +38,7 @@ class Settings(BaseSettings):
         validation_alias="SQLITE_DB_PATH",
     )
     chroma_persist_dir: Path = Field(
-        default=Path("data/chroma"),
+        default=Path("chroma_db"),
         validation_alias="CHROMA_PERSIST_DIR",
     )
     policies_dir: Path = Field(
@@ -46,7 +46,7 @@ class Settings(BaseSettings):
         validation_alias="POLICIES_DIR",
     )
     rag_chunk_size: int = Field(default=800, validation_alias="RAG_CHUNK_SIZE")
-    rag_chunk_overlap: int = Field(default=120, validation_alias="RAG_CHUNK_OVERLAP")
+    rag_chunk_overlap: int = Field(default=150, validation_alias="RAG_CHUNK_OVERLAP")
     rag_top_k: int = Field(default=4, validation_alias="RAG_TOP_K")
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
 
