@@ -18,6 +18,11 @@ from src.rag.vector_store import NO_DOCUMENTS_MESSAGE, get_vector_store, has_ind
 
 INITIAL_RETRIEVAL_K = 12
 FINAL_TOP_K = 5
+MAX_RELEVANCE_DISTANCE = 1.1
+NO_RELEVANT_POLICY_CONTEXT_MESSAGE = (
+    "No relevant policy context found for that question. "
+    "Try asking about refund, warranty, shipping, or cancellation policies."
+)
 
 POLICY_TYPE_KEYWORDS: dict[str, tuple[str, ...]] = {
     "refund": ("refund", "refunds", "refunded", "return", "returns", "returned",
@@ -84,18 +89,30 @@ def _retrieve_candidates(
     query: str,
     k: int,
     preferred_policy_types: set[str],
-) -> list[Document]:
-    """Retrieve candidate chunks, preferring metadata-filtered search when possible."""
+) -> list[tuple[Document, float]]:
+    """Retrieve scored candidate chunks, preferring metadata-filtered search."""
     if preferred_policy_types:
         metadata_filter = _build_policy_type_filter(preferred_policy_types)
         try:
-            filtered = store.similarity_search(query, k=k, filter=metadata_filter)
+            filtered = store.similarity_search_with_score(
+                query,
+                k=k,
+                filter=metadata_filter,
+            )
             if filtered:
                 return filtered
         except Exception:
             pass
 
-    return store.similarity_search(query, k=k)
+    return store.similarity_search_with_score(query, k=k)
+
+
+def _filter_relevant_documents(
+    scored_documents: list[tuple[Document, float]],
+    max_distance: float = MAX_RELEVANCE_DISTANCE,
+) -> list[Document]:
+    """Keep only chunks whose Chroma distance score is relevant enough."""
+    return [doc for doc, score in scored_documents if score <= max_distance]
 
 
 def _rerank_documents(
@@ -177,9 +194,13 @@ def search_policy_documents(query: str, top_k: int = 5) -> list[dict[str, Any]] 
             INITIAL_RETRIEVAL_K,
             preferred_policy_types,
         )
+        relevant_candidates = _filter_relevant_documents(candidates)
+        if not relevant_candidates:
+            return {"message": NO_RELEVANT_POLICY_CONTEXT_MESSAGE}
+
         ranked = _rerank_documents(
             cleaned,
-            candidates,
+            relevant_candidates,
             min(top_k, FINAL_TOP_K),
             preferred_policy_types=preferred_policy_types,
         )
@@ -246,10 +267,7 @@ def answer_policy_question(query: str) -> dict[str, Any]:
 
     if not search_results:
         return {
-            "answer": (
-                "I could not find relevant policy information for that question. "
-                "Try rephrasing your question or upload additional policy documents."
-            ),
+            "answer": NO_RELEVANT_POLICY_CONTEXT_MESSAGE,
             "sources": [],
             "rewritten_query": rewritten,
             "retrieved_context_count": 0,

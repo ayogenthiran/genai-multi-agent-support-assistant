@@ -12,6 +12,7 @@ from langchain_core.documents import Document
 from src.create_policy_pdfs import create_policy_pdfs
 from src.rag.document_loader import infer_policy_type, load_documents, load_pdf_pages
 from src.rag.retriever import (
+    NO_RELEVANT_POLICY_CONTEXT_MESSAGE,
     _build_policy_type_filter,
     _infer_query_policy_types,
     _rerank_documents,
@@ -267,35 +268,50 @@ def test_build_policy_type_filter_mixed_types() -> None:
     }
 
 
-def test_search_policy_documents_uses_metadata_filter_for_refund_query() -> None:
-    refund_docs = [_make_doc("refund", f"refund detail {index}") for index in range(3)]
+@pytest.mark.parametrize(
+    ("query", "policy_type"),
+    [
+        ("What is the refund policy?", "refund"),
+        ("What does the warranty cover?", "warranty"),
+        ("How long does shipping take?", "shipping"),
+        ("Can I cancel my order?", "cancellation"),
+    ],
+)
+def test_search_policy_documents_uses_scored_metadata_filter_for_policy_queries(
+    query: str,
+    policy_type: str,
+) -> None:
+    policy_docs = [
+        _make_doc(policy_type, f"{policy_type} policy detail {index}")
+        for index in range(3)
+    ]
     mock_store = MagicMock()
 
-    def _similarity_search(
+    def _similarity_search_with_score(
         query: str,
         k: int,
         filter: dict[str, str] | None = None,
-    ) -> list[Document]:
-        if filter == {"policy_type": "refund"}:
-            return refund_docs
+    ) -> list[tuple[Document, float]]:
+        if filter == {"policy_type": policy_type}:
+            return [(doc, 0.4) for doc in policy_docs]
         return [
-            _make_doc("shipping"),
-            _make_doc("warranty"),
-            _make_doc("refund"),
+            (_make_doc("shipping"), 0.4),
+            (_make_doc("warranty"), 0.4),
+            (_make_doc("refund"), 0.4),
         ]
 
-    mock_store.similarity_search.side_effect = _similarity_search
+    mock_store.similarity_search_with_score.side_effect = _similarity_search_with_score
 
     with patch("src.rag.retriever.get_vector_store", return_value=mock_store), patch(
         "src.rag.retriever.has_indexed_documents", return_value=True
-    ), patch("src.rag.retriever.rewrite_policy_query", return_value="refund policy"):
-        results = search_policy_documents("What is the refund policy?")
+    ), patch("src.rag.retriever.rewrite_policy_query", return_value=f"{policy_type} policy"):
+        results = search_policy_documents(query)
 
     assert isinstance(results, list)
     assert len(results) == 3
-    assert {result["policy_type"] for result in results} == {"refund"}
-    first_call = mock_store.similarity_search.call_args_list[0]
-    assert first_call.kwargs["filter"] == {"policy_type": "refund"}
+    assert {result["policy_type"] for result in results} == {policy_type}
+    first_call = mock_store.similarity_search_with_score.call_args_list[0]
+    assert first_call.kwargs["filter"] == {"policy_type": policy_type}
 
 
 def test_search_policy_documents_falls_back_when_filtered_search_is_empty() -> None:
@@ -304,9 +320,9 @@ def test_search_policy_documents_falls_back_when_filtered_search_is_empty() -> N
         _make_doc("warranty", "warranty coverage and repair details"),
     ]
     mock_store = MagicMock()
-    mock_store.similarity_search.side_effect = [
+    mock_store.similarity_search_with_score.side_effect = [
         [],
-        fallback_docs,
+        [(doc, 0.4) for doc in fallback_docs],
     ]
 
     with patch("src.rag.retriever.get_vector_store", return_value=mock_store), patch(
@@ -316,11 +332,27 @@ def test_search_policy_documents_falls_back_when_filtered_search_is_empty() -> N
 
     assert isinstance(results, list)
     assert len(results) == 2
-    assert mock_store.similarity_search.call_count == 2
-    assert mock_store.similarity_search.call_args_list[0].kwargs["filter"] == {
+    assert mock_store.similarity_search_with_score.call_count == 2
+    assert mock_store.similarity_search_with_score.call_args_list[0].kwargs["filter"] == {
         "policy_type": "refund"
     }
-    assert "filter" not in mock_store.similarity_search.call_args_list[1].kwargs
+    assert "filter" not in mock_store.similarity_search_with_score.call_args_list[1].kwargs
+
+
+def test_search_policy_documents_returns_no_context_for_irrelevant_question() -> None:
+    mock_store = MagicMock()
+    mock_store.similarity_search_with_score.return_value = [
+        (_make_doc("shipping", "delivery times and tracking details"), 1.6),
+        (_make_doc("warranty", "repair coverage for defective products"), 1.7),
+    ]
+
+    with patch("src.rag.retriever.get_vector_store", return_value=mock_store), patch(
+        "src.rag.retriever.has_indexed_documents", return_value=True
+    ), patch("src.rag.retriever.rewrite_policy_query", return_value="office lunch menu"):
+        results = search_policy_documents("What food is served in the office cafeteria?")
+
+    assert isinstance(results, dict)
+    assert results["message"] == NO_RELEVANT_POLICY_CONTEXT_MESSAGE
 
 
 def test_search_policy_documents_without_index_returns_helpful_message(
