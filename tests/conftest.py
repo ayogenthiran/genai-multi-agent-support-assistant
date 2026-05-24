@@ -9,6 +9,8 @@ import pytest
 from src.create_dummy_data import create_dummy_data
 
 EMA_JOHNSON = "Ema Johnson"
+DANIEL_SMITH = "Daniel Smith"
+PRIYA_PATEL = "Priya Patel"
 
 SQL_QUERY = (
     "Give me a quick overview of customer Ema Johnson's profile and "

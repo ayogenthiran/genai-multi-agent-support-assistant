@@ -26,7 +26,7 @@ class SupportState(TypedDict, total=False):
     user_query: str
     route: RouteType
     sql_result: str | None
-    rag_result: str | None
+    rag_result: dict[str, Any] | None
     final_answer: str | None
     agent_used: str | None
     error: str | None
@@ -65,13 +65,11 @@ def _sql_node(state: SupportState) -> dict[str, Any]:
 def _rag_node(state: SupportState) -> dict[str, Any]:
     result = create_rag_agent()(dict(state))
     rag_context = result.get("rag_context")
-    return {"rag_context": rag_context, "rag_result": rag_context}
+    return {"rag_context": rag_context, "rag_result": result.get("rag_result")}
 
 
 def _response_node(state: SupportState) -> dict[str, Any]:
     bridged = dict(state)
-    if state.get("rag_result") and not state.get("rag_context"):
-        bridged["rag_context"] = state["rag_result"]
 
     result = create_response_agent()(bridged)
     route = state.get("route", "general")

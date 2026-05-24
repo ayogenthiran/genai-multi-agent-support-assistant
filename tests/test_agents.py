@@ -11,6 +11,7 @@ from src.agents.customer_names import match_known_customer
 from src.agents.rag_agent import create_rag_agent, run_rag_lookup
 from src.agents.response_agent import create_response_agent, synthesize_response
 from src.agents.sql_agent import _extract_customer_name, create_sql_agent, run_sql_lookup
+from src.mcp_server.server import list_tools
 from src.tools.sql_tools import (
     get_customer_by_name,
     get_customer_profile_and_tickets,
@@ -19,7 +20,18 @@ from src.tools.sql_tools import (
     get_refund_related_tickets,
 )
 
-from tests.conftest import EMA_JOHNSON, GENERAL_QUERY, SQL_QUERY
+from tests.conftest import DANIEL_SMITH, EMA_JOHNSON, GENERAL_QUERY, PRIYA_PATEL, SQL_QUERY
+
+EXPECTED_MCP_TOOLS = {
+    "customer_profile_lookup",
+    "customer_ticket_lookup",
+    "open_ticket_lookup",
+    "refund_ticket_lookup",
+    "high_priority_open_ticket_lookup",
+    "policy_document_search",
+    "policy_question_answer",
+    "pdf_ingestion",
+}
 
 
 @pytest.mark.parametrize(
@@ -52,11 +64,33 @@ def test_specialist_agent_factories_return_callables(factory) -> None:
     assert callable(node)
 
 
+def test_mcp_style_tool_registry_exposes_expected_tools() -> None:
+    assert set(list_tools()) == EXPECTED_MCP_TOOLS
+
+
 def test_get_customer_by_name_returns_ema_profile(seeded_db: Path) -> None:
     customer = get_customer_by_name(EMA_JOHNSON)
     assert customer["customer_id"] == 1
     assert customer["full_name"] == EMA_JOHNSON
     assert customer["customer_tier"] == "Premium"
+
+
+@pytest.mark.parametrize(
+    ("name", "customer_id"),
+    [
+        (EMA_JOHNSON, 1),
+        (DANIEL_SMITH, 2),
+        (PRIYA_PATEL, 3),
+    ],
+)
+def test_seeded_demo_customer_names_are_deterministic(
+    seeded_db: Path,
+    name: str,
+    customer_id: int,
+) -> None:
+    customer = get_customer_by_name(name)
+    assert customer["customer_id"] == customer_id
+    assert customer["full_name"] == name
 
 
 def test_get_customer_profile_and_tickets_returns_ema_history(seeded_db: Path) -> None:
@@ -150,11 +184,17 @@ def test_rag_lookup_without_documents_returns_guidance(
     reset_vector_store(chroma_dir)
 
     try:
-        message = run_rag_lookup("What is the refund policy?")
+        result = run_rag_lookup("What is the refund policy?")
     finally:
         get_settings.cache_clear()
 
-    assert "upload" in message.lower() or "indexed" in message.lower()
+    assert set(result) >= {
+        "answer",
+        "sources",
+        "rewritten_query",
+        "retrieved_context_count",
+    }
+    assert "upload" in result["answer"].lower() or "indexed" in result["answer"].lower()
 
 
 def test_response_agent_general_fallback() -> None:

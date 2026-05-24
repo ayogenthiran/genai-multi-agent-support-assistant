@@ -127,7 +127,7 @@ This project was built to demonstrate:
                 │                                     │
                 ▼                                     ▼
 ┌───────────────────────────────┐   ┌─────────────────────────────────────┐
-│   SQLite (data/customers.db)  │   │  ChromaDB (data/chroma/)            │
+│   SQLite (data/customers.db)  │   │  ChromaDB (chroma_db/ by default)   │
 │   customers · support_tickets │   │  embedded policy document chunks    │
 └───────────────────────────────┘   └─────────────────────────────────────┘
 ```
@@ -174,7 +174,7 @@ This project uses a LangGraph-based supervisor workflow instead of a single mono
 
 - The Supervisor Agent classifies the user query and routes it to the correct specialist agent.
 - The SQL Customer Agent retrieves structured customer profile and support ticket data from SQLite through MCP-style tools.
-- The Policy RAG Agent retrieves relevant policy context from ChromaDB using LLM-based query rewriting and source-aware retrieval.
+- The Policy RAG Agent retrieves relevant policy context from ChromaDB using LLM-based query rewriting and source-aware retrieval, and returns `answer`, `sources`, `rewritten_query`, and `retrieved_context_count`.
 - The Response Synthesis Agent combines SQL and RAG outputs into a clear final response for the support executive.
 
 This design was chosen over a fully open-ended ReAct agent to improve reliability, testability, and demo stability.
@@ -198,7 +198,7 @@ This design was chosen over a fully open-ended ReAct agent to improve reliabilit
    - `rag` → Policy RAG Agent only
    - `both` → SQL Agent, then RAG Agent (sequential)
    - `general` → skip specialists, go straight to synthesis
-4. **Specialist agents** call MCP tools and write results into shared graph state (`sql_result`, `rag_context`).
+4. **Specialist agents** call MCP tools and write results into shared graph state (`sql_result`, structured `rag_result`, and formatted `rag_context` for synthesis).
 5. **Response Synthesis Agent** merges all context into one professional, source-attributed reply.
 6. **Streamlit displays** the final answer and which agent(s) were used.
 
@@ -311,10 +311,10 @@ genai-multi-agent-support-assistant/
 ├── .env.example                # Environment variable template
 ├── README.md
 │
-├── data/                       # Runtime data (gitignored binaries)
+├── data/                       # Runtime SQLite DB and uploaded/generated policy PDFs
 │   ├── customers.db            # SQLite database (created by seed script)
-│   ├── chroma/                 # ChromaDB persist directory
 │   └── policies/               # Policy PDF storage
+├── chroma_db/                  # Default ChromaDB persist directory
 │
 ├── src/
 │   ├── config.py               # Settings from .env

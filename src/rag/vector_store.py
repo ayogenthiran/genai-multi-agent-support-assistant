@@ -76,9 +76,10 @@ def chunk_documents(documents: list[Document]) -> list[Document]:
     if not documents:
         return []
 
+    settings = get_settings()
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=CHUNK_SIZE,
-        chunk_overlap=CHUNK_OVERLAP,
+        chunk_size=settings.rag_chunk_size or CHUNK_SIZE,
+        chunk_overlap=settings.rag_chunk_overlap or CHUNK_OVERLAP,
         separators=CHUNK_SEPARATORS,
     )
     chunks = splitter.split_documents(documents)
@@ -157,7 +158,7 @@ def index_documents(persist_dir: Path | None = None, policies_dir: Path | None =
 
 
 def reset_vector_store(persist_dir: Path | None = None) -> None:
-    """Delete and recreate the policy_documents collection."""
+    """Delete the policy_documents collection and clear the cached store."""
     global _store, _store_persist_dir
 
     settings = get_settings()
@@ -172,4 +173,3 @@ def reset_vector_store(persist_dir: Path | None = None) -> None:
 
     _store = None
     _store_persist_dir = None
-    get_vector_store(target_dir)

@@ -7,11 +7,13 @@ from src.mcp_server.server import (
     customer_profile_lookup,
     customer_ticket_lookup,
     get_langchain_tools,
+    high_priority_open_ticket_lookup,
     list_tools,
     open_ticket_lookup,
     pdf_ingestion,
     policy_document_search,
     policy_question_answer,
+    refund_ticket_lookup,
 )
 
 __all__ = [
@@ -21,9 +23,11 @@ __all__ = [
     "customer_profile_lookup",
     "customer_ticket_lookup",
     "get_langchain_tools",
+    "high_priority_open_ticket_lookup",
     "list_tools",
     "open_ticket_lookup",
     "pdf_ingestion",
     "policy_document_search",
     "policy_question_answer",
+    "refund_ticket_lookup",
 ]

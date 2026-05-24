@@ -16,7 +16,8 @@ from typing import Any
 import streamlit as st
 
 MIN_PYTHON = (3, 10)
-PAGE_TITLE = "GenAI Multi-Agent Customer Support Assistant"
+PAGE_TITLE = "Multi-Agent Customer Support Assistant"
+DISPLAY_TITLE = f"🤖 {PAGE_TITLE}"
 
 
 def _ensure_python_version() -> None:
@@ -37,7 +38,7 @@ def _ensure_python_version() -> None:
         ".venv/bin/streamlit run app.py\n"
         "```"
     )
-    st.set_page_config(page_title=PAGE_TITLE, page_icon="💬", layout="wide")
+    st.set_page_config(page_title=PAGE_TITLE, page_icon="🤖", layout="wide")
     st.error("Incompatible Python version")
     st.markdown(message)
     st.stop()
@@ -61,18 +62,6 @@ AGENT_LABELS: dict[str, str] = {
 NO_ANSWER_MESSAGE = (
     "I could not generate an answer for that question. Please try again."
 )
-
-EXAMPLE_QUESTIONS: list[str] = [
-    "Give me a quick overview of customer Ema Johnson's profile and past support ticket details.",
-    "Show me Daniel Smith's open support tickets.",
-    "Give me Priya Patel's support ticket history.",
-    "Show me Priya Patel's refund-related tickets.",
-    "Are there any high-priority open tickets?",
-    "Can Ema Johnson get a refund based on her support history and the refund policy?",
-    "What is the current refund policy?",
-    "What does the warranty policy say?",
-    "Hi, what can you do?",
-]
 
 DEFAULT_ERROR_MESSAGE = (
     "Something went wrong while processing your question. "
@@ -120,35 +109,41 @@ def _process_uploaded_pdf(uploaded_file: Any) -> None:
         st.warning(message)
 
 
-def _run_workflow(user_query: str) -> tuple[str, str]:
+def _run_workflow(user_query: str) -> tuple[str, str, str | None]:
     try:
         result = run_multi_agent_workflow(user_query)
     except Exception:
-        return DEFAULT_ERROR_MESSAGE, AGENT_LABELS["general"]
+        return DEFAULT_ERROR_MESSAGE, AGENT_LABELS["general"], "error"
 
     agent_used = _format_agent_used(result)
     error = result.get("error")
     final_answer = str(result.get("final_answer") or "").strip()
 
     if error:
-        return f"{DEFAULT_ERROR_MESSAGE}\n\nDetails: {error}", agent_used
+        return DEFAULT_ERROR_MESSAGE, agent_used, "warning"
     if not final_answer:
-        return NO_ANSWER_MESSAGE, agent_used
-    return final_answer, agent_used
+        return NO_ANSWER_MESSAGE, agent_used, "warning"
+    return final_answer, agent_used, None
 
 
 def _append_assistant_reply(user_query: str) -> None:
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            final_answer, agent_used = _run_workflow(user_query)
-        st.markdown(final_answer)
-        st.caption(f"**Agent used:** {agent_used}")
+            final_answer, agent_used, status = _run_workflow(user_query)
+        if status == "error":
+            st.error(final_answer)
+        elif status == "warning":
+            st.warning(final_answer)
+        else:
+            st.markdown(final_answer)
+        st.caption(f"Agent used: {agent_used}")
 
     st.session_state.messages.append(
         {
             "role": "assistant",
             "content": final_answer,
             "agent_used": agent_used,
+            "status": status,
         }
     )
 
@@ -162,41 +157,45 @@ def _submit_user_query(user_query: str) -> None:
 
 def _render_sidebar() -> None:
     with st.sidebar:
-        st.header("Policy documents")
-        st.caption("Upload a company policy PDF to index it for RAG search.")
+        st.header("Policy Documents")
+        st.caption("Upload a policy PDF to make it searchable.")
 
         uploaded_file = st.file_uploader(
-            "Upload policy PDF",
+            "Policy PDF",
             type=["pdf"],
             help="PDFs are saved to data/policies/ and indexed into ChromaDB.",
         )
 
-        if st.button("Process Policy PDF", use_container_width=True):
+        if st.button("Process", use_container_width=True):
             if uploaded_file is None:
                 st.warning("Please upload a PDF before processing.")
             else:
                 _process_uploaded_pdf(uploaded_file)
 
-        st.divider()
-        st.subheader("Example questions")
-        st.caption("Click a question to send it to the assistant.")
-
-        for index, question in enumerate(EXAMPLE_QUESTIONS):
-            if st.button(
-                question,
-                key=f"example_question_{index}",
-                use_container_width=True,
-            ):
-                _submit_user_query(question)
-                st.rerun()
-
 
 def _render_chat_history() -> None:
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            status = message.get("status")
+            if status == "error":
+                st.error(message["content"])
+            elif status == "warning":
+                st.warning(message["content"])
+            else:
+                st.markdown(message["content"])
             if message["role"] == "assistant" and message.get("agent_used"):
-                st.caption(f"**Agent used:** {message['agent_used']}")
+                st.caption(f"Agent used: {message['agent_used']}")
+
+
+def _render_chat_area() -> None:
+    _render_chat_history()
+
+
+def _render_page_header() -> None:
+    st.title(DISPLAY_TITLE)
+    st.caption(
+        "Ask questions about customer profiles, support tickets, and policy documents."
+    )
 
 
 def _maybe_answer_latest_user_message() -> None:
@@ -210,24 +209,16 @@ def main() -> None:
     """Launch the Streamlit application."""
     st.set_page_config(
         page_title=PAGE_TITLE,
-        page_icon="💬",
+        page_icon="🤖",
         layout="wide",
     )
 
     _init_session_state()
     _render_sidebar()
 
-    st.title(PAGE_TITLE)
-    st.markdown(
-        "Ask about a customer's profile and support ticket history, their open or "
-        "refund-related tickets, high-priority open tickets, or company policies "
-        "from uploaded PDFs. The SQL Customer Agent uses predefined, parameterized "
-        "SQL queries (no LLM-generated SQL); the Policy RAG Agent answers from "
-        "indexed policy documents. The supervisor routes each question to the SQL "
-        "agent, the policy RAG agent, both, or a general reply."
-    )
+    _render_page_header()
 
-    _render_chat_history()
+    _render_chat_area()
     _maybe_answer_latest_user_message()
 
     if prompt := st.chat_input("Ask about customers, tickets, or company policies..."):

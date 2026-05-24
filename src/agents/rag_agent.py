@@ -28,19 +28,40 @@ def _extract_user_query(state: dict[str, Any]) -> str:
     return str(state.get("query", "")).strip()
 
 
-def run_rag_lookup(query: str) -> str:
-    """Run policy document search and question answering via MCP-style tools."""
+def _empty_rag_result(answer: str, rewritten_query: str = "") -> dict[str, Any]:
+    return {
+        "answer": answer,
+        "sources": [],
+        "rewritten_query": rewritten_query,
+        "retrieved_context_count": 0,
+    }
+
+
+def _format_rag_context(answer_payload: dict[str, Any], passages: str) -> str:
+    return RAG_LOOKUP_RESPONSE_TEMPLATE.format(
+        formatted_answer=format_policy_answer(answer_payload),
+        passages=passages,
+    )
+
+
+def run_rag_lookup(query: str) -> dict[str, Any]:
+    """Run policy Q&A and document search via MCP-style tools."""
     cleaned = query.strip()
     if not cleaned:
-        return "Please provide a policy-related question."
+        return _empty_rag_result("Please provide a policy-related question.")
 
     answer_payload = call_tool("policy_question_answer", query=cleaned)
     passages = call_tool("policy_document_search", query=cleaned)
-    formatted_answer = format_policy_answer(answer_payload)
-    return RAG_LOOKUP_RESPONSE_TEMPLATE.format(
-        formatted_answer=formatted_answer,
-        passages=passages,
-    )
+    rag_result = {
+        "answer": str(answer_payload.get("answer", "")).strip(),
+        "sources": list(answer_payload.get("sources") or []),
+        "rewritten_query": str(answer_payload.get("rewritten_query", "")).strip(),
+        "retrieved_context_count": int(
+            answer_payload.get("retrieved_context_count", 0) or 0,
+        ),
+    }
+    rag_result["supporting_passages"] = passages
+    return rag_result
 
 
 def create_rag_agent() -> Callable[[dict[str, Any]], dict[str, Any]]:
@@ -48,7 +69,9 @@ def create_rag_agent() -> Callable[[dict[str, Any]], dict[str, Any]]:
 
     def rag_node(state: dict[str, Any]) -> dict[str, Any]:
         query = _extract_user_query(state)
-        rag_context = run_rag_lookup(query)
-        return {"rag_context": rag_context}
+        rag_result = run_rag_lookup(query)
+        passages = str(rag_result.get("supporting_passages", "")).strip()
+        rag_context = _format_rag_context(rag_result, passages)
+        return {"rag_result": rag_result, "rag_context": rag_context}
 
     return rag_node
