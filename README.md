@@ -30,56 +30,6 @@ The system supports:
 
 ![GenAI multi-agent customer support assistant architecture](assets/architecture.png)
 
-```text
-┌──────────────────────────────────────────────────────────────────────┐
-│                        Customer Support Executive                     │
-└──────────────────────────────────┬───────────────────────────────────┘
-                                   │
-                                   ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                          Streamlit Chat UI                            │
-│              Natural language chat + policy PDF upload                │
-└──────────────────────────────────┬───────────────────────────────────┘
-                                   │
-                                   ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                      LangGraph Supervisor Agent                       │
-│           Routes each question to SQL, RAG, both, or general          │
-└───────────────┬──────────────────┬──────────────────┬────────────────┘
-                │                  │                  │
-                ▼                  ▼                  ▼
-┌────────────────────────┐ ┌────────────────────────┐ ┌────────────────────────┐
-│   SQL Customer Agent   │ │    Policy RAG Agent    │ │  Final Response Agent  │
-│ Customer profile and   │ │ Policy search and Q&A  │ │ Combines retrieved     │
-│ support ticket lookup  │ │ over uploaded PDFs     │ │ data into final answer │
-└───────────┬────────────┘ └───────────┬────────────┘ └───────────▲────────────┘
-            │                          │                          │
-            ▼                          ▼                          │
-┌────────────────────────┐ ┌────────────────────────┐              │
-│     MCP SQL Tools      │ │  MCP Document Tools    │              │
-│ Parameterized lookups  │ │ PDF ingestion + RAG    │              │
-└───────────┬────────────┘ └───────────┬────────────┘              │
-            │                          │                          │
-            ▼                          ▼                          │
-┌────────────────────────┐ ┌────────────────────────┐              │
-│ SQLite Customer DB     │ │ ChromaDB Vector Store  │              │
-│ customers + tickets    │ │ indexed policy chunks  │              │
-└───────────┬────────────┘ └───────────┬────────────┘              │
-            │                          │                          │
-            └──────────────┬───────────┘                          │
-                           │                                      │
-                           ▼                                      │
-                 ┌──────────────────────┐                        │
-                 │ Retrieved Context    │────────────────────────┘
-                 │ SQL data + policies  │
-                 └──────────┬───────────┘
-                            │
-                            ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                 Final Context-Aware Support Response                  │
-└──────────────────────────────────────────────────────────────────────┘
-```
-
 The supervisor decides whether a question needs customer data, policy context, both, or a general response. Specialist agents retrieve the relevant context through the MCP-style tool layer, and the response agent produces the final answer for the support executive.
 
 ## Project Setup
