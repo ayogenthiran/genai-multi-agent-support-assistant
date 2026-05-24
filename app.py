@@ -49,13 +49,14 @@ _ensure_python_version()
 from src.config import get_settings  # noqa: E402
 from src.graph.workflow import run_multi_agent_workflow  # noqa: E402
 from src.mcp_server.server import pdf_ingestion  # noqa: E402
+from src.rag.vector_store import reset_vector_store  # noqa: E402
 
 AGENT_LABELS: dict[str, str] = {
     "sql": "SQL Agent",
     "rag": "Policy RAG Agent",
-    "both": "Both",
+    "both": "SQL Agent + Policy RAG Agent",
     # Legacy value emitted by older workflow versions; kept for back-compat.
-    "sql,rag": "Both",
+    "sql,rag": "SQL Agent + Policy RAG Agent",
     "general": "General Response",
 }
 
@@ -95,7 +96,8 @@ def _save_uploaded_pdf(uploaded_file: Any) -> Path:
 def _process_uploaded_pdf(uploaded_file: Any) -> None:
     try:
         file_path = _save_uploaded_pdf(uploaded_file)
-        with st.spinner("Indexing policy PDF..."):
+        with st.spinner("Clearing existing policy index and indexing PDF..."):
+            reset_vector_store()
             result = pdf_ingestion(str(file_path))
     except Exception as exc:
         st.error(f"Failed to process PDF: {exc}")
@@ -104,7 +106,7 @@ def _process_uploaded_pdf(uploaded_file: Any) -> None:
     message = result.get("message", "PDF processed.")
     chunks_added = result.get("chunks_added", 0)
     if chunks_added:
-        st.success(message)
+        st.success("Previous policy index cleared. Policy PDF indexed successfully.")
     else:
         st.warning(message)
 
@@ -166,7 +168,7 @@ def _render_sidebar() -> None:
             help="PDFs are saved to data/policies/ and indexed into ChromaDB.",
         )
 
-        if st.button("Process", use_container_width=True):
+        if st.button("Process Policy PDF", use_container_width=True):
             if uploaded_file is None:
                 st.warning("Please upload a PDF before processing.")
             else:

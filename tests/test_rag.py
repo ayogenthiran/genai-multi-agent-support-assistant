@@ -65,6 +65,55 @@ def test_document_tools_expose_policy_question_answer() -> None:
     assert callable(document_tools.pdf_ingestion)
 
 
+class _UploadedPolicyPdf:
+    name = "refund_policy.pdf"
+
+    def getbuffer(self) -> bytes:
+        return b"%PDF-1.4 sample refund policy"
+
+
+def test_streamlit_pdf_processing_resets_index_before_ingestion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    policies_dir = tmp_path / "policies"
+    monkeypatch.setenv("POLICIES_DIR", str(policies_dir))
+
+    from src.config import get_settings
+
+    get_settings.cache_clear()
+    import app
+
+    calls: list[str | tuple[str, str]] = []
+
+    def _record_reset() -> None:
+        calls.append("reset")
+
+    def _record_ingestion(file_path: str) -> dict[str, object]:
+        calls.append(("ingest", file_path))
+        return {
+            "file": file_path,
+            "chunks_added": 1,
+            "message": "Indexed 1 chunks from refund_policy.pdf.",
+        }
+
+    try:
+        with patch.object(app, "reset_vector_store", side_effect=_record_reset), patch.object(
+            app,
+            "pdf_ingestion",
+            side_effect=_record_ingestion,
+        ), patch.object(app.st, "spinner"), patch.object(app.st, "success") as success:
+            app._process_uploaded_pdf(_UploadedPolicyPdf())
+    finally:
+        get_settings.cache_clear()
+
+    assert calls[0] == "reset"
+    assert calls[1][0] == "ingest"
+    assert Path(calls[1][1]).name == "refund_policy.pdf"
+    assert (policies_dir / "refund_policy.pdf").exists()
+    success.assert_called_once()
+
+
 def test_policy_question_answer_returns_required_fields() -> None:
     mock_payload = {
         "answer": "Refunds are available within 30 days of delivery.",
@@ -84,6 +133,22 @@ def test_policy_question_answer_returns_required_fields() -> None:
     assert result["sources"]
     assert result["rewritten_query"]
     assert result["retrieved_context_count"] == 3
+
+
+def test_format_policy_answer_dedupes_and_groups_sources() -> None:
+    result = {
+        "answer": "Refunds are available within 30 days.",
+        "sources": [
+            {"source": "refund_policy.pdf", "page": 1, "chunk_id": "chunk-1"},
+            {"source": "refund_policy.pdf", "page": 1, "chunk_id": "chunk-2"},
+            {"source": "refund_policy.pdf", "page": 2, "chunk_id": "chunk-3"},
+        ],
+    }
+
+    formatted = document_tools.format_policy_answer(result)
+
+    assert "Sources: refund_policy.pdf (pages 1, 2)" in formatted
+    assert formatted.count("refund_policy.pdf") == 1
 
 
 def test_infer_query_policy_types_detects_refund_keywords() -> None:

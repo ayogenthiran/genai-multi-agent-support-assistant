@@ -9,7 +9,11 @@ import pytest
 
 from src.agents.customer_names import match_known_customer
 from src.agents.rag_agent import create_rag_agent, run_rag_lookup
-from src.agents.response_agent import create_response_agent, synthesize_response
+from src.agents.response_agent import (
+    _ensure_policy_sources,
+    create_response_agent,
+    synthesize_response,
+)
 from src.agents.sql_agent import _extract_customer_name, create_sql_agent, run_sql_lookup
 from src.mcp_server.server import list_tools
 from src.tools.sql_tools import (
@@ -200,3 +204,19 @@ def test_rag_lookup_without_documents_returns_guidance(
 def test_response_agent_general_fallback() -> None:
     answer = synthesize_response(GENERAL_QUERY, route="general")
     assert "support assistant" in answer.lower()
+
+
+def test_response_agent_preserves_policy_sources() -> None:
+    rag_context = (
+        "Policy answer:\n"
+        "Eligible if requested within 30 days.\n\n"
+        "Sources: refund_policy.pdf (pages 1, 2)\n\n"
+        "Supporting policy excerpts:\n"
+        "[1] Source: refund_policy.pdf (page 1)\n"
+        "Refunds are available within 30 days."
+    )
+
+    answer = _ensure_policy_sources("Ema appears eligible.", rag_context)
+
+    assert "Sources:" in answer
+    assert "refund_policy.pdf (pages 1, 2)" in answer

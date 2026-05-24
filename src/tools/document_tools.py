@@ -64,6 +64,41 @@ def policy_question_answer(query: str) -> dict[str, Any]:
     }
 
 
+def _sort_pages(pages: set[Any]) -> list[Any]:
+    return sorted(
+        pages,
+        key=lambda page: (
+            not isinstance(page, int),
+            page if isinstance(page, int) else str(page),
+        ),
+    )
+
+
+def _format_source_reference(source: str, pages: set[Any]) -> str:
+    sorted_pages = _sort_pages(pages)
+    label = "page" if len(sorted_pages) == 1 else "pages"
+    return f"{source} ({label} {', '.join(str(page) for page in sorted_pages)})"
+
+
+def format_source_references(sources: list[dict[str, Any]]) -> str:
+    """Format source metadata with duplicate file/page pairs removed."""
+    source_pages: dict[str, set[Any]] = {}
+    for item in sources:
+        source = str(item.get("source", "unknown"))
+        page = item.get("page", "?")
+        source_pages.setdefault(source, set()).add(page)
+
+    references = [
+        _format_source_reference(source, pages)
+        for source, pages in source_pages.items()
+    ]
+    if not references:
+        return ""
+    if len(references) == 1:
+        return f"Sources: {references[0]}"
+    return "Sources:\n" + "\n".join(f"- {reference}" for reference in references)
+
+
 def format_policy_answer(result: dict[str, Any]) -> str:
     """Format a policy_question_answer dict into a human-readable string."""
     answer = str(result.get("answer", "")).strip()
@@ -71,11 +106,10 @@ def format_policy_answer(result: dict[str, Any]) -> str:
     if not sources:
         return answer
 
-    source_lines = [
-        f"- {item.get('source', 'unknown')} (page {item.get('page', '?')})"
-        for item in sources
-    ]
-    return f"{answer}\n\nSources:\n" + "\n".join(source_lines)
+    source_block = format_source_references(sources)
+    if not source_block:
+        return answer
+    return f"{answer}\n\n{source_block}"
 
 
 def get_document_tools() -> list[Any]:

@@ -7,9 +7,9 @@ from langchain_core.prompts import ChatPromptTemplate
 # Explains the assistant's supported demo capabilities for general queries.
 GENERAL_CAPABILITY_REPLY = (
     "Hello. I am a customer support assistant for support executives. "
-    "I can look up customer profiles and ticket history from the customer database, "
-    "answer policy questions using company policy documents, and combine both when needed. "
-    "Ask about a customer account, open tickets, refunds, warranties, or cancellations."
+    "I can look up customer profiles and support ticket history from the customer database, "
+    "answer policy questions using uploaded company policy documents, "
+    "and combine both when customer data and policy guidance are needed."
 )
 
 # Routes ambiguous customer support queries to the appropriate specialist agent.
@@ -18,11 +18,21 @@ SUPERVISOR_ROUTING_PROMPT = ChatPromptTemplate.from_messages(
         (
             "system",
             "You route customer support queries for a support executive assistant.\n"
-            "Return exactly one label: sql, rag, both, or general.\n"
-            "- sql: customer/profile/ticket/order/account/history lookups\n"
-            "- rag: policy/refund/warranty/cancellation/document questions\n"
-            "- both: mixed questions needing customer data and policy guidance\n"
-            "- general: greetings, capability questions, or small talk\n"
+            "Return exactly one label: sql, rag, both, or general.\n\n"
+            "Routing rules:\n"
+            "- sql: customer/profile/ticket/order/account/history lookups that only need customer database data\n"
+            "- rag: policy/refund/warranty/cancellation/document questions that only need policy documents\n"
+            "- both: questions that mention a customer and also ask for policy guidance, eligibility, refund, warranty, cancellation, or what action to take\n"
+            "- general: greetings, capability questions, thanks, or small talk\n\n"
+            "Examples:\n"
+            "Query: Give me Ema Johnson's profile and ticket history\n"
+            "Label: sql\n"
+            "Query: What is the current refund policy?\n"
+            "Label: rag\n"
+            "Query: Can Ema Johnson get a refund based on her support history and the refund policy?\n"
+            "Label: both\n"
+            "Query: Hi, what can you do?\n"
+            "Label: general\n\n"
             "Reply with only the label.",
         ),
         ("human", "{query}"),
@@ -62,6 +72,8 @@ POLICY_ANSWER_PROMPT = ChatPromptTemplate.from_messages(
             "system",
             "You are a customer support policy assistant helping a support executive.\n"
             "Answer ONLY using the provided policy excerpts.\n"
+            "Do not treat template placeholders such as [DATE], [WEBSITE_NAME], "
+            "or [COMPANY_INFORMATION] as real company facts.\n"
             "If the excerpts do not contain enough information, clearly state that "
             "the uploaded policy documents do not contain enough information.\n\n"
             "Structure your response with these sections:\n"

@@ -75,6 +75,39 @@ def _fallback_response(
     return "\n\n".join(sections)
 
 
+def _extract_policy_sources(rag_context: str | None) -> str:
+    if not rag_context:
+        return ""
+
+    marker = "\nSources:"
+    marker_index = rag_context.find(marker)
+    if marker_index == -1:
+        return ""
+
+    sources = rag_context[marker_index + 1 :]
+    end_marker = "\n\nSupporting policy excerpts:"
+    end_index = sources.find(end_marker)
+    if end_index != -1:
+        sources = sources[:end_index]
+
+    source_lines = [line.strip() for line in sources.splitlines() if line.strip()]
+    if not source_lines:
+        return ""
+    return "\n".join(source_lines)
+
+
+def _ensure_policy_sources(answer: str, rag_context: str | None) -> str:
+    sources = _extract_policy_sources(rag_context)
+    if not sources:
+        return answer
+
+    lowered = answer.lower()
+    if "sources:" in lowered or "sources used" in lowered:
+        return answer
+
+    return f"{answer.rstrip()}\n\n{sources}"
+
+
 def synthesize_response(
     query: str,
     *,
@@ -111,7 +144,7 @@ def synthesize_response(
         # LLM unavailable mid-demo: render the deterministic fallback so
         # already-fetched SQL/RAG context still reaches the user.
         return _fallback_response(cleaned_query, route, sql_result, rag_context)
-    return str(response.content).strip()
+    return _ensure_policy_sources(str(response.content).strip(), rag_context)
 
 
 def create_response_agent() -> Callable[[dict[str, Any]], dict[str, Any]]:
